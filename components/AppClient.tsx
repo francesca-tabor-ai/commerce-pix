@@ -12,6 +12,17 @@ import { getAssetsClient } from '@/lib/db/assets-client'
 import type { Project } from '@/lib/db/types'
 import type { Asset } from '@/lib/db/asset-types'
 import UploadComponent from '@/components/UploadComponent'
+import ModeSelector from '@/components/ModeSelector'
+
+type Mode = 'main_white' | 'lifestyle' | 'feature_callout' | 'packaging'
+
+interface ModeSettings {
+  mode: Mode
+  productCategory?: string
+  brandTone?: string
+  productDescription?: string
+  scene?: string
+}
 
 export default function AppClient({ userId }: { userId: string }) {
   // Projects state
@@ -25,10 +36,13 @@ export default function AppClient({ userId }: { userId: string }) {
 
   // Generate state
   const [inputAssetId, setInputAssetId] = useState('')
-  const [generateMode, setGenerateMode] = useState('main_white')
-  const [productDescription, setProductDescription] = useState('')
-  const [productCategory, setProductCategory] = useState('')
-  const [brandTone, setBrandTone] = useState('')
+  const [modeSettings, setModeSettings] = useState<ModeSettings>({
+    mode: 'main_white',
+    productCategory: '',
+    brandTone: '',
+    productDescription: '',
+    scene: '',
+  })
   const [generating, setGenerating] = useState(false)
 
   // Gallery state
@@ -125,10 +139,11 @@ export default function AppClient({ userId }: { userId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           inputAssetId,
-          mode: generateMode,
-          productDescription: productDescription || undefined,
-          productCategory: productCategory || undefined,
-          brandTone: brandTone || undefined,
+          mode: modeSettings.mode,
+          productDescription: modeSettings.productDescription || undefined,
+          productCategory: modeSettings.productCategory || undefined,
+          brandTone: modeSettings.brandTone || undefined,
+          constraints: modeSettings.scene ? [`Scene: ${modeSettings.scene}`] : undefined,
         }),
       })
 
@@ -161,6 +176,13 @@ export default function AppClient({ userId }: { userId: string }) {
     lifestyle: outputAssets.filter(a => a.mode === 'lifestyle'),
     feature_callout: outputAssets.filter(a => a.mode === 'feature_callout'),
     packaging: outputAssets.filter(a => a.mode === 'packaging'),
+  }
+
+  const modeLabels: Record<string, string> = {
+    main_white: 'Main Image (White Background)',
+    lifestyle: 'Lifestyle Scene',
+    feature_callout: 'Feature Callout',
+    packaging: 'Packaging / In-Box',
   }
 
   return (
@@ -282,68 +304,11 @@ export default function AppClient({ userId }: { userId: string }) {
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Generation Mode</Label>
-                    <Select value={generateMode} onValueChange={setGenerateMode} disabled={generating}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="main_white">Main White</SelectItem>
-                        <SelectItem value="lifestyle">Lifestyle</SelectItem>
-                        <SelectItem value="feature_callout">Feature Callout</SelectItem>
-                        <SelectItem value="packaging">Packaging</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Product Description (optional)</Label>
-                    <Input
-                      placeholder="e.g., wireless headphones"
-                      value={productDescription}
-                      onChange={(e) => setProductDescription(e.target.value)}
-                      disabled={generating}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Category (optional)</Label>
-                      <Select value={productCategory} onValueChange={setProductCategory} disabled={generating}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          <SelectItem value="electronics">Electronics</SelectItem>
-                          <SelectItem value="clothing">Clothing</SelectItem>
-                          <SelectItem value="food">Food</SelectItem>
-                          <SelectItem value="beauty">Beauty</SelectItem>
-                          <SelectItem value="home">Home</SelectItem>
-                          <SelectItem value="toys">Toys</SelectItem>
-                          <SelectItem value="sports">Sports</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Brand Tone (optional)</Label>
-                      <Select value={brandTone} onValueChange={setBrandTone} disabled={generating}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          <SelectItem value="professional">Professional</SelectItem>
-                          <SelectItem value="luxury">Luxury</SelectItem>
-                          <SelectItem value="playful">Playful</SelectItem>
-                          <SelectItem value="minimal">Minimal</SelectItem>
-                          <SelectItem value="bold">Bold</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                  <ModeSelector
+                    value={modeSettings}
+                    onChange={setModeSettings}
+                    disabled={generating}
+                  />
 
                   <Button onClick={handleGenerate} disabled={!inputAssetId || generating}>
                     {generating ? (
@@ -389,8 +354,8 @@ export default function AppClient({ userId }: { userId: string }) {
 
                         return (
                           <div key={mode}>
-                            <h3 className="font-semibold mb-3 capitalize">
-                              {mode.replace('_', ' ')} ({assets.length})
+                            <h3 className="font-semibold mb-3">
+                              {modeLabels[mode]} ({assets.length})
                             </h3>
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                               {assets.map(asset => (
