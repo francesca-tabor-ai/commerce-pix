@@ -11,6 +11,7 @@ import { getProjectsClient, createProjectClient } from '@/lib/db/projects-client
 import { getAssetsClient } from '@/lib/db/assets-client'
 import type { Project } from '@/lib/db/types'
 import type { Asset } from '@/lib/db/asset-types'
+import UploadComponent from '@/components/UploadComponent'
 
 export default function AppClient({ userId }: { userId: string }) {
   // Projects state
@@ -19,10 +20,8 @@ export default function AppClient({ userId }: { userId: string }) {
   const [newProjectName, setNewProjectName] = useState('')
   const [creatingProject, setCreatingProject] = useState(false)
 
-  // Upload state
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploadMode, setUploadMode] = useState('main_white')
-  const [uploading, setUploading] = useState(false)
+  // Upload state - simplified, handled by UploadComponent
+  const [uploadedAssetId, setUploadedAssetId] = useState<string | null>(null)
 
   // Generate state
   const [inputAssetId, setInputAssetId] = useState('')
@@ -110,41 +109,6 @@ export default function AppClient({ userId }: { userId: string }) {
       }
     } catch (error) {
       console.error(`Failed to fetch signed URL for ${assetId}:`, error)
-    }
-  }
-
-  const handleUpload = async () => {
-    if (!uploadFile || !selectedProject) {
-      alert('Please select a file and project')
-      return
-    }
-
-    setUploading(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', uploadFile)
-      formData.append('projectId', selectedProject.id)
-      formData.append('mode', uploadMode)
-
-      const response = await fetch('/api/assets/upload', {
-        method: 'POST',
-        body: formData,
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setInputAssetId(data.assetId)
-        setUploadFile(null)
-        await loadAssets()
-        alert('Upload successful! You can now generate images.')
-      } else {
-        alert(`Upload failed: ${data.error}`)
-      }
-    } catch (error) {
-      alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -275,53 +239,18 @@ export default function AppClient({ userId }: { userId: string }) {
                     Upload Product Image
                   </CardTitle>
                   <CardDescription>
-                    Upload a product image to transform (jpg/png/webp, max 8MB)
+                    Drag & drop or click to upload a product image (jpg/png/webp, max 8MB)
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Select Image</Label>
-                    <Input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={(e) => e.target.files && setUploadFile(e.target.files[0])}
-                      disabled={uploading}
+                <CardContent>
+                  {selectedProject ? (
+                    <UploadComponent
+                      projectId={selectedProject.id}
+                      onUploadSuccess={handleUploadSuccess}
                     />
-                    {uploadFile && (
-                      <p className="text-sm text-muted-foreground">
-                        Selected: {uploadFile.name} ({(uploadFile.size / 1024 / 1024).toFixed(2)} MB)
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Initial Mode</Label>
-                    <Select value={uploadMode} onValueChange={setUploadMode} disabled={uploading}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="main_white">Main White</SelectItem>
-                        <SelectItem value="lifestyle">Lifestyle</SelectItem>
-                        <SelectItem value="feature_callout">Feature Callout</SelectItem>
-                        <SelectItem value="packaging">Packaging</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
-                    {uploading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload
-                      </>
-                    )}
-                  </Button>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Select a project first</p>
+                  )}
                 </CardContent>
               </Card>
 
