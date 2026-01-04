@@ -4,6 +4,7 @@ import { getAsset, createAsset } from '@/lib/db/assets'
 import { createGenerationJob, updateGenerationJob } from '@/lib/db/generation-jobs'
 import { uploadFile, getSignedUrl, BUCKETS } from '@/lib/storage/server'
 import { buildPrompt, type PromptInputs } from '@/lib/prompts'
+import { checkAllRateLimits, recordGenerationUsage } from '@/lib/rate-limit'
 import OpenAI from 'openai'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -48,6 +49,38 @@ export async function POST(request: NextRequest) {
   try {
     // Authenticate user
     const user = await requireUser()
+
+    // Check rate limits BEFORE any processing
+    const rateLimitCheck = await checkAllRateLimits(user.id)
+
+    if (!rateLimitCheck.allowed) {
+      const blockedLimit = rateLimitCheck.blockedBy === 'per_minute' 
+        ? rateLimitCheck.perMinute 
+        : rateLimitCheck.perDay
+
+      return NextResponse.json(
+        { 
+          error: 'Rate limit exceeded',
+          message: blockedLimit.message,
+          rateLimit: {
+            type: rateLimitCheck.blockedBy,
+            limit: blockedLimit.limit,
+            current: blockedLimit.current,
+            remaining: blockedLimit.remaining,
+            resetAt: blockedLimit.resetAt.toISOString(),
+          }
+        },
+        { 
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': String(blockedLimit.limit),
+            'X-RateLimit-Remaining': String(blockedLimit.remaining),
+            'X-RateLimit-Reset': blockedLimit.resetAt.toISOString(),
+            'Retry-After': String(Math.ceil((blockedLimit.resetAt.getTime() - Date.now()) / 1000)),
+          }
+        }
+      )
+    }
 
     // Check if OpenAI API key is configured
     if (!process.env.OPENAI_API_KEY) {
@@ -134,9 +167,25 @@ export async function POST(request: NextRequest) {
       user.id
     ).catch(error => console.error('Background generation error:', error))
 
+    // Record usage AFTER successful job creation
+    await recordGenerationUsage(user.id)
+
+    // Include rate limit info in response
     return NextResponse.json({
       job,
       message: 'Generation job created and processing',
+      rateLimit: {
+        perMinute: {
+          current: rateLimitCheck.perMinute.current + 1, // +1 for this request
+          limit: rateLimitCheck.perMinute.limit,
+          remaining: Math.max(0, rateLimitCheck.perMinute.remaining - 1),
+        },
+        perDay: {
+          current: rateLimitCheck.perDay.current + 1, // +1 for this request
+          limit: rateLimitCheck.perDay.limit,
+          remaining: Math.max(0, rateLimitCheck.perDay.remaining - 1),
+        },
+      },
     })
   } catch (error) {
     console.error('Generate API error:', error)

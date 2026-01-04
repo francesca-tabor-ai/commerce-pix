@@ -14,6 +14,10 @@ export default function APITestClient({ userId }: { userId: string }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   
+  // Rate limit state
+  const [rateLimitStatus, setRateLimitStatus] = useState<any>(null)
+  const [loadingRateLimit, setLoadingRateLimit] = useState(false)
+  
   // Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadMode, setUploadMode] = useState('main_white')
@@ -36,6 +40,7 @@ export default function APITestClient({ userId }: { userId: string }) {
 
   useEffect(() => {
     loadProjects()
+    loadRateLimitStatus()
   }, [])
 
   const loadProjects = async () => {
@@ -47,6 +52,19 @@ export default function APITestClient({ userId }: { userId: string }) {
       }
     } catch (error) {
       console.error('Failed to load projects:', error)
+    }
+  }
+
+  const loadRateLimitStatus = async () => {
+    setLoadingRateLimit(true)
+    try {
+      const response = await fetch('/api/rate-limit/status')
+      const data = await response.json()
+      setRateLimitStatus(data)
+    } catch (error) {
+      console.error('Failed to load rate limit status:', error)
+    } finally {
+      setLoadingRateLimit(false)
     }
   }
 
@@ -122,8 +140,10 @@ export default function APITestClient({ userId }: { userId: string }) {
 
       if (response.ok) {
         setGenerateResult(data)
+        // Refresh rate limit status after generation
+        await loadRateLimitStatus()
       } else {
-        setGenerateResult({ error: data.error })
+        setGenerateResult({ error: data.error, message: data.message, rateLimit: data.rateLimit })
       }
     } catch (error) {
       setGenerateResult({ error: error instanceof Error ? error.message : 'Generation failed' })
@@ -336,7 +356,20 @@ export default function APITestClient({ userId }: { userId: string }) {
           {generateResult && (
             <div className={`p-4 rounded-md ${generateResult.error ? 'bg-red-50 text-red-900' : 'bg-green-50 text-green-900'}`}>
               {generateResult.error ? (
-                <p className="font-medium">{generateResult.error}</p>
+                <div>
+                  <p className="font-medium mb-2">{generateResult.error}</p>
+                  {generateResult.message && (
+                    <p className="text-sm">{generateResult.message}</p>
+                  )}
+                  {generateResult.rateLimit && (
+                    <div className="mt-3 p-2 bg-white rounded text-xs">
+                      <p className="font-medium mb-1">Rate Limit Info:</p>
+                      <p>Type: {generateResult.rateLimit.type}</p>
+                      <p>Used: {generateResult.rateLimit.current}/{generateResult.rateLimit.limit}</p>
+                      <p>Reset at: {new Date(generateResult.rateLimit.resetAt).toLocaleString()}</p>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-2 text-sm">
                   <p><strong>Job ID:</strong> {generateResult.job.id}</p>
@@ -348,6 +381,13 @@ export default function APITestClient({ userId }: { userId: string }) {
                   <p className="text-xs text-muted-foreground">
                     Check the jobs test page to see the job status and get the output asset ID.
                   </p>
+                  {generateResult.rateLimit && (
+                    <div className="mt-3 p-2 bg-white rounded text-xs">
+                      <p className="font-medium mb-1">Rate Limit Updated:</p>
+                      <p>Per Minute: {generateResult.rateLimit.perMinute.current}/{generateResult.rateLimit.perMinute.limit} ({generateResult.rateLimit.perMinute.remaining} remaining)</p>
+                      <p>Per Day: {generateResult.rateLimit.perDay.current}/{generateResult.rateLimit.perDay.limit} ({generateResult.rateLimit.perDay.remaining} remaining)</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
