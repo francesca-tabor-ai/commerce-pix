@@ -52,17 +52,10 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // Protected routes - redirect to login if not authenticated
-  if (!user && (pathname === '/' || pathname.startsWith('/app'))) {
+  // Only protect /app routes - redirect to login if not authenticated
+  if (!user && pathname.startsWith('/app')) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
-  }
-
-  // If logged in and visiting root, redirect to /app
-  if (user && pathname === '/') {
-    const url = request.nextUrl.clone()
-    url.pathname = '/app'
     return NextResponse.redirect(url)
   }
 

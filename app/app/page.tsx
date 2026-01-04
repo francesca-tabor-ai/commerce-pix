@@ -1,20 +1,12 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { requireUser } from '@/lib/supabase/server'
 import SignOutButton from '@/components/SignOutButton'
 
 // Force dynamic rendering to avoid build-time errors with missing env vars
 export const dynamic = 'force-dynamic'
 
 export default async function AppPage() {
-  const supabase = await createClient()
-  
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/auth/login')
-  }
+  // requireUser() will redirect to /auth/login if not logged in
+  const user = await requireUser()
 
   return (
     <div className="min-h-screen bg-gray-50">

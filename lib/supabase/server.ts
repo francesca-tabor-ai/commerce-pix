@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { cache } from 'react'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -33,5 +35,37 @@ export async function createClient() {
       },
     }
   )
+}
+
+/**
+ * Get the current user from the session
+ * Returns the user object if logged in, null otherwise
+ * Uses React cache to avoid multiple fetches in the same request
+ */
+export const getUser = cache(async () => {
+  const supabase = await createClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  
+  if (error) {
+    console.error('Error fetching user:', error.message)
+    return null
+  }
+  
+  return user
+})
+
+/**
+ * Require a user to be logged in
+ * If not logged in, redirects to /auth/login
+ * Returns the user object
+ */
+export async function requireUser() {
+  const user = await getUser()
+  
+  if (!user) {
+    redirect('/auth/login')
+  }
+  
+  return user
 }
 
