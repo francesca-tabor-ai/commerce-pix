@@ -3,9 +3,10 @@
 import { useState, FormEvent } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-
-// Force dynamic rendering to avoid build-time errors with missing env vars
-export const dynamic = 'force-dynamic'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState('')
@@ -39,85 +40,82 @@ export default function ResetPasswordPage() {
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
-          <div>
-            <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
-              Check your email
-            </h2>
-          </div>
-          <div className="rounded-md bg-green-50 p-4">
-            <p className="text-sm text-green-800">
-              We've sent you a password reset link. Please check your email.
-            </p>
-          </div>
-          <div className="text-sm text-center">
-            <Link
-              href="/auth/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              Back to sign in
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-center">Check your email</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-green-50 text-green-800 text-sm p-4 rounded-md border border-green-200">
+              <p className="font-medium">Password reset email sent!</p>
+              <p className="mt-2">
+                We've sent a password reset link to <strong>{email}</strong>. 
+                Please check your inbox and follow the instructions.
+              </p>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Link href="/auth/login" className="w-full">
+              <Button variant="outline" className="w-full">
+                Back to sign in
+              </Button>
             </Link>
-          </div>
-        </div>
+          </CardFooter>
+        </Card>
       </div>
     )
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
-            Reset your password
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Enter your email address and we'll send you a link to reset your password.
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm text-red-800">{error}</p>
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">Reset password</CardTitle>
+          <CardDescription className="text-center">
+            Enter your email address and we'll send you a link to reset your password
+          </CardDescription>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            {error && (
+              <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md border border-destructive/30">
+                {error}
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+              />
             </div>
-          )}
-          <div>
-            <label htmlFor="email-address" className="sr-only">
-              Email address
-            </label>
-            <input
-              id="email-address"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-              placeholder="Email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <button
+          </CardContent>
+          
+          <CardFooter className="flex flex-col space-y-4">
+            <Button
               type="submit"
+              className="w-full"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Sending reset link...' : 'Send reset link'}
-            </button>
-          </div>
-
-          <div className="text-sm text-center">
-            <Link
-              href="/auth/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              Back to sign in
-            </Link>
-          </div>
+              {loading ? 'Sending...' : 'Send reset link'}
+            </Button>
+            
+            <div className="text-sm text-center text-muted-foreground">
+              Remember your password?{' '}
+              <Link href="/auth/login" className="text-primary hover:underline font-medium">
+                Sign in
+              </Link>
+            </div>
+          </CardFooter>
         </form>
-      </div>
+      </Card>
     </div>
   )
 }
-
