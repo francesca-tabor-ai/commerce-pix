@@ -17,7 +17,10 @@ const openai = new OpenAI({
 /**
  * POST /api/generate
  * 
- * Trigger AI image generation using OpenAI DALL-E
+ * Trigger AI image generation using OpenAI DALL-E 2 (image editing)
+ * 
+ * Takes an uploaded product image and transforms it based on the selected mode
+ * (main_white, lifestyle, feature_callout, packaging) using structured prompts.
  * 
  * Request (JSON):
  * - inputAssetId: string (required) - ID of the input asset
@@ -28,10 +31,18 @@ const openai = new OpenAI({
  * - constraints: string[] (optional) - Additional constraints
  * - promptVersion: string (optional, default: 'v1')
  * 
+ * Process:
+ * 1. Create generation_jobs row (status: 'queued')
+ * 2. Fetch input image from storage
+ * 3. Call OpenAI DALL-E 2 image edit API (image + prompt)
+ * 4. Receive base64 image response
+ * 5. Upload output to commercepix-outputs bucket
+ * 6. Create assets row (kind: 'output', source_asset_id: input)
+ * 7. Update generation_jobs (status: 'succeeded' or 'failed')
+ * 
  * Response:
  * - job: Generation job object
- * - outputAsset: Output asset object (if generation succeeds immediately)
- * - signedUrl: Signed URL for the generated image (if available)
+ * - message: Status message
  */
 export async function POST(request: NextRequest) {
   try {
@@ -92,11 +103,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create generation job
+    // Create generation job (status defaults to 'queued' in createGenerationJob)
     const job = await createGenerationJob({
-      user_id: user.id,
       project_id: inputAsset.project_id,
-      status: 'queued',
       mode,
       input_asset_id: inputAssetId,
       cost_cents: 0, // Will be updated after generation
@@ -165,29 +174,53 @@ async function processGeneration(
     console.log(`Generating image for job ${jobId} with mode: ${mode}`)
     console.log('Prompt:', prompt)
 
-    // Call OpenAI DALL-E API
-    const response = await openai.images.generate({
-      model: 'dall-e-3',
+    // Download input image from storage
+    const inputImageUrl = await getSignedUrl(
+      BUCKETS.INPUTS,
+      inputAsset.storage_path,
+      3600 // 1 hour
+    )
+
+    if (!inputImageUrl.data?.signedUrl) {
+      throw new Error('Failed to get signed URL for input image')
+    }
+
+    console.log('Downloading input image from storage...')
+    const inputImageResponse = await fetch(inputImageUrl.data.signedUrl)
+    if (!inputImageResponse.ok) {
+      throw new Error('Failed to download input image from storage')
+    }
+
+    const inputImageBuffer = Buffer.from(await inputImageResponse.arrayBuffer())
+
+    // Convert to File object for OpenAI API
+    const inputFile = new File([inputImageBuffer], 'input.png', {
+      type: inputAsset.mime_type || 'image/png',
+    })
+
+    console.log('Calling OpenAI DALL-E 2 image edit API...')
+    
+    // Call OpenAI DALL-E 2 Edit API (supports image + prompt)
+    // Note: DALL-E 2 is used for image editing, DALL-E 3 only supports text-to-image
+    const response = await openai.images.edit({
+      model: 'dall-e-2',
+      image: inputFile,
       prompt,
       n: 1,
       size: '1024x1024',
-      quality: 'standard',
-      response_format: 'url',
+      response_format: 'b64_json', // Get base64 to avoid extra download
     })
 
-    const imageUrl = response.data[0]?.url
+    const b64Image = response.data?.[0]?.b64_json
 
-    if (!imageUrl) {
-      throw new Error('No image URL returned from OpenAI')
+    if (!b64Image) {
+      throw new Error('No image data returned from OpenAI')
     }
 
-    // Download the generated image
-    const imageResponse = await fetch(imageUrl)
-    if (!imageResponse.ok) {
-      throw new Error('Failed to download generated image')
-    }
+    console.log('Received generated image from OpenAI')
 
-    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+    // Convert base64 to buffer
+    const imageBuffer = Buffer.from(b64Image, 'base64')
 
     // Generate output asset ID
     const outputAssetId = uuidv4()
@@ -211,8 +244,6 @@ async function processGeneration(
 
     // Create output asset record
     const outputAsset = await createAsset({
-      id: outputAssetId,
-      user_id: userId,
       project_id: inputAsset.project_id,
       kind: 'output',
       mode: mode as any,
@@ -225,8 +256,8 @@ async function processGeneration(
       storage_path: storagePath,
     })
 
-    // Calculate cost (DALL-E 3 standard: $0.040 per image = 4 cents)
-    const costCents = 4
+    // Calculate cost (DALL-E 2 edit: $0.020 per image = 2 cents)
+    const costCents = 2
 
     // Update job as succeeded
     await updateGenerationJob(jobId, {
