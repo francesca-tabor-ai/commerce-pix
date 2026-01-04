@@ -12,15 +12,14 @@ export const dynamic = 'force-dynamic'
  * Upload an input image asset
  * 
  * Request (multipart/form-data):
- * - file: File (required)
+ * - file: File (required) - jpg/png/webp only, max 8MB
  * - projectId: string (required)
- * - mode: 'main_white' | 'lifestyle' | 'feature_callout' | 'packaging' (required)
+ * - mode: 'main_white' | 'lifestyle' | 'feature_callout' | 'packaging' (optional, default: 'main_white')
  * - promptVersion: string (optional, default: 'v1')
  * - promptPayload: JSON string (optional, default: '{}')
  * 
  * Response:
- * - asset: Asset object with id, storage_path, etc.
- * - signedUrl: Temporary signed URL for immediate display
+ * - assetId: string
  */
 export async function POST(request: NextRequest) {
   try {
@@ -31,7 +30,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const projectId = formData.get('projectId') as string
-    const mode = formData.get('mode') as string
+    const mode = (formData.get('mode') as string) || 'main_white' // Default to main_white
     const promptVersion = (formData.get('promptVersion') as string) || 'v1'
     const promptPayloadStr = (formData.get('promptPayload') as string) || '{}'
 
@@ -50,8 +49,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate mode
     const validModes = ['main_white', 'lifestyle', 'feature_callout', 'packaging']
-    if (!mode || !validModes.includes(mode)) {
+    if (!validModes.includes(mode)) {
       return NextResponse.json(
         { error: `Mode must be one of: ${validModes.join(', ')}` },
         { status: 400 }
@@ -69,19 +69,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
+    // Validate file type (jpg/png/webp only)
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: 'File must be an image' },
+        { error: 'File must be jpg, png, or webp' },
         { status: 400 }
       )
     }
 
-    // Validate file size (50MB limit)
-    const maxSize = 50 * 1024 * 1024 // 50MB
+    // Validate file size (8MB limit)
+    const maxSize = 8 * 1024 * 1024 // 8MB
     if (file.size > maxSize) {
       return NextResponse.json(
-        { error: 'File size must be less than 50MB' },
+        { error: 'File size must be less than 8MB' },
         { status: 400 }
       )
     }
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create asset record in database
-    const asset = await createAsset({
+    await createAsset({
       id: assetId,
       user_id: user.id,
       project_id: projectId,
@@ -130,17 +131,9 @@ export async function POST(request: NextRequest) {
       storage_path: uploadResult.path!,
     })
 
-    // Generate signed URL for immediate display
-    const { getSignedUrl } = await import('@/lib/storage/server')
-    const signedUrlResult = await getSignedUrl(
-      BUCKETS.INPUTS,
-      uploadResult.path!,
-      3600
-    )
-
+    // Return simple response with asset ID
     return NextResponse.json({
-      asset,
-      signedUrl: signedUrlResult.data?.signedUrl || null,
+      assetId,
     })
   } catch (error) {
     console.error('Asset upload error:', error)

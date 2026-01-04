@@ -73,8 +73,16 @@ export default function APITestClient({ userId }: { userId: string }) {
       const data = await response.json()
 
       if (response.ok) {
-        setUploadResult(data)
-        setInputAssetId(data.asset.id) // Auto-fill for generate test
+        // Fetch signed URL for the uploaded asset
+        const urlResponse = await fetch(`/api/assets/${data.assetId}/signed-url?expiresIn=3600`)
+        const urlData = await urlResponse.json()
+        
+        setUploadResult({
+          assetId: data.assetId,
+          signedUrl: urlData.signedUrl,
+          asset: urlData.asset
+        })
+        setInputAssetId(data.assetId) // Auto-fill for generate test
       } else {
         setUploadResult({ error: data.error })
       }
@@ -218,10 +226,14 @@ export default function APITestClient({ userId }: { userId: string }) {
                 <p className="font-medium">{uploadResult.error}</p>
               ) : (
                 <div className="space-y-2 text-sm">
-                  <p><strong>Asset ID:</strong> {uploadResult.asset.id}</p>
-                  <p><strong>Storage Path:</strong> {uploadResult.asset.storage_path}</p>
-                  <p><strong>Kind:</strong> {uploadResult.asset.kind}</p>
-                  <p><strong>Mode:</strong> {uploadResult.asset.mode}</p>
+                  <p><strong>Asset ID:</strong> {uploadResult.assetId}</p>
+                  {uploadResult.asset && (
+                    <>
+                      <p><strong>Storage Path:</strong> {uploadResult.asset.storage_path}</p>
+                      <p><strong>Kind:</strong> {uploadResult.asset.kind}</p>
+                      <p><strong>Mode:</strong> {uploadResult.asset.mode}</p>
+                    </>
+                  )}
                   {uploadResult.signedUrl && (
                     <div className="mt-2">
                       <img src={uploadResult.signedUrl} alt="Uploaded" className="max-w-xs rounded border" />
