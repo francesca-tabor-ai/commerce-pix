@@ -23,7 +23,9 @@ export default function APITestClient({ userId }: { userId: string }) {
   // Generate state
   const [inputAssetId, setInputAssetId] = useState('')
   const [generateMode, setGenerateMode] = useState('main_white')
-  const [customPrompt, setCustomPrompt] = useState('')
+  const [productDescription, setProductDescription] = useState('')
+  const [productCategory, setProductCategory] = useState('')
+  const [brandTone, setBrandTone] = useState('')
   const [generating, setGenerating] = useState(false)
   const [generateResult, setGenerateResult] = useState<any>(null)
   
@@ -109,9 +111,10 @@ export default function APITestClient({ userId }: { userId: string }) {
         body: JSON.stringify({
           inputAssetId,
           mode: generateMode,
-          prompt: customPrompt || undefined,
+          productDescription: productDescription || undefined,
+          productCategory: productCategory || undefined,
+          brandTone: brandTone || undefined,
           promptVersion: 'v1',
-          promptPayload: { description: 'a product' },
         }),
       })
 
@@ -279,13 +282,51 @@ export default function APITestClient({ userId }: { userId: string }) {
           </div>
 
           <div className="space-y-2">
-            <Label>Custom Prompt (optional)</Label>
-            <Textarea
-              placeholder="Leave empty to use default prompt for mode"
-              value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
+            <Label>Product Description (optional)</Label>
+            <Input
+              placeholder="e.g., wireless headphones, organic coffee"
+              value={productDescription}
+              onChange={(e) => setProductDescription(e.target.value)}
               disabled={generating}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Product Category (optional)</Label>
+              <Select value={productCategory} onValueChange={setProductCategory} disabled={generating}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="electronics">Electronics</SelectItem>
+                  <SelectItem value="clothing">Clothing</SelectItem>
+                  <SelectItem value="food">Food</SelectItem>
+                  <SelectItem value="beauty">Beauty</SelectItem>
+                  <SelectItem value="home">Home</SelectItem>
+                  <SelectItem value="toys">Toys</SelectItem>
+                  <SelectItem value="sports">Sports</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Brand Tone (optional)</Label>
+              <Select value={brandTone} onValueChange={setBrandTone} disabled={generating}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select tone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="professional">Professional</SelectItem>
+                  <SelectItem value="luxury">Luxury</SelectItem>
+                  <SelectItem value="playful">Playful</SelectItem>
+                  <SelectItem value="minimal">Minimal</SelectItem>
+                  <SelectItem value="bold">Bold</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <Button onClick={handleGenerate} disabled={!inputAssetId || generating}>

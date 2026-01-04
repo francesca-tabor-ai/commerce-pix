@@ -6,6 +6,10 @@ A Next.js starter project with Supabase Authentication and Tailwind CSS v4.
 
 - ✅ Next.js 16 with App Router
 - ✅ Supabase Authentication (email/password)
+- ✅ Supabase Database with RLS policies
+- ✅ Supabase Storage with signed URLs
+- ✅ AI Image Generation (OpenAI DALL-E 3)
+- ✅ Structured Prompt Library
 - ✅ Tailwind CSS v4
 - ✅ TypeScript
 - ✅ Protected routes with middleware
@@ -141,6 +145,11 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
 │   │   ├── login/          # Login page
 │   │   ├── signup/         # Signup page
 │   │   └── reset-password/ # Password reset page
+│   ├── api/
+│   │   ├── assets/
+│   │   │   ├── upload/     # POST upload input images
+│   │   │   └── [id]/signed-url/ # GET signed URLs
+│   │   └── generate/       # POST trigger AI generation
 │   ├── layout.tsx
 │   └── page.tsx            # Root page (redirects based on auth)
 ├── components/
@@ -152,11 +161,15 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
 │   │   └── middleware.ts   # Auth middleware logic
 │   ├── storage/
 │   │   └── server.ts       # Storage helpers (upload, signed URLs, delete)
+│   ├── prompts.ts          # AI prompt templates (server-only)
 │   └── db/
 │       ├── projects.ts     # Projects database helpers
 │       ├── assets.ts       # Assets database helpers
 │       └── generation-jobs.ts # Jobs database helpers
-└── middleware.ts           # Next.js middleware
+├── docs/                    # Documentation
+│   ├── PROMPT_LIBRARY.md   # Prompt templates guide
+│   └── ...
+└── middleware.ts            # Next.js middleware
 
 ```
 
@@ -242,6 +255,42 @@ import { getGenerationJobs, createGenerationJob } from '@/lib/db/generation-jobs
 - `/assets-test` - Test asset management
 - `/jobs-test` - Test generation job tracking
 - `/storage-test` - Test file upload and signed URLs
+- `/api-test` - Test API endpoints (upload, generate, signed URLs)
+
+## AI Prompt Library
+
+The project includes a structured prompt library (`lib/prompts.ts`) with templates for different image generation modes:
+
+### Modes
+
+- **`main_white`** - Professional product photo on pure white background (Amazon main image)
+- **`lifestyle`** - Product in real-world context (lifestyle shots)
+- **`feature_callout`** - Highlight specific product features (infographic-style)
+- **`packaging`** - Product in retail packaging (package shots)
+
+### Structured Inputs
+
+All prompts are built from structured inputs:
+
+```typescript
+{
+  productCategory?: 'electronics' | 'clothing' | 'food' | 'beauty' | ...
+  brandTone?: 'professional' | 'luxury' | 'playful' | 'minimal' | 'bold'
+  productDescription?: string  // e.g., "wireless headphones"
+  constraints?: string[]       // Additional requirements
+}
+```
+
+### Server-Side Only
+
+The prompt library is **server-side only** (`import 'server-only'`). Clients select a mode, not the full prompt. This ensures:
+- ✅ Prompt injection protection
+- ✅ Business logic protection
+- ✅ Cost control
+- ✅ Amazon compliance enforcement
+- ✅ Consistent quality
+
+See [`docs/PROMPT_LIBRARY.md`](./docs/PROMPT_LIBRARY.md) for complete documentation.
 
 ## Documentation
 

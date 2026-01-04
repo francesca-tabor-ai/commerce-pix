@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/supabase/server'
 import { getAsset, createAsset } from '@/lib/db/assets'
 import { createGenerationJob, updateGenerationJob } from '@/lib/db/generation-jobs'
 import { uploadFile, getSignedUrl, BUCKETS } from '@/lib/storage/server'
+import { buildPrompt, type PromptInputs } from '@/lib/prompts'
 import OpenAI from 'openai'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -21,9 +22,11 @@ const openai = new OpenAI({
  * Request (JSON):
  * - inputAssetId: string (required) - ID of the input asset
  * - mode: 'main_white' | 'lifestyle' | 'feature_callout' | 'packaging' (required)
- * - prompt: string (optional) - Custom prompt override
+ * - productCategory: string (optional) - e.g., "electronics", "clothing"
+ * - brandTone: string (optional) - e.g., "professional", "luxury"
+ * - productDescription: string (optional) - e.g., "wireless headphones"
+ * - constraints: string[] (optional) - Additional constraints
  * - promptVersion: string (optional, default: 'v1')
- * - promptPayload: object (optional, default: {}) - Structured prompt parameters
  * 
  * Response:
  * - job: Generation job object
@@ -48,9 +51,11 @@ export async function POST(request: NextRequest) {
     const {
       inputAssetId,
       mode,
-      prompt: customPrompt,
+      productCategory,
+      brandTone,
+      productDescription,
+      constraints,
       promptVersion = 'v1',
-      promptPayload = {},
     } = body
 
     // Validate required fields
@@ -106,8 +111,19 @@ export async function POST(request: NextRequest) {
 
     // Start generation asynchronously (in a real app, this would be a background job)
     // For MVP, we'll do it inline but return the job immediately
-    processGeneration(job.id, inputAsset, mode, customPrompt, promptVersion, promptPayload, user.id)
-      .catch(error => console.error('Background generation error:', error))
+    processGeneration(
+      job.id,
+      inputAsset,
+      mode,
+      {
+        productCategory,
+        brandTone,
+        productDescription,
+        constraints,
+      },
+      promptVersion,
+      user.id
+    ).catch(error => console.error('Background generation error:', error))
 
     return NextResponse.json({
       job,
@@ -135,19 +151,19 @@ async function processGeneration(
   jobId: string,
   inputAsset: any,
   mode: string,
-  customPrompt: string | undefined,
+  promptInputs: PromptInputs,
   promptVersion: string,
-  promptPayload: any,
   userId: string
 ) {
   try {
     // Update job status to running
     await updateGenerationJob(jobId, { status: 'running' })
 
-    // Build prompt based on mode
-    const prompt = customPrompt || buildPrompt(mode, inputAsset, promptPayload)
+    // Build prompt using prompt library
+    const { prompt, promptPayload } = buildPrompt(mode as any, promptInputs)
 
-    console.log(`Generating image for job ${jobId} with prompt: ${prompt}`)
+    console.log(`Generating image for job ${jobId} with mode: ${mode}`)
+    console.log('Prompt:', prompt)
 
     // Call OpenAI DALL-E API
     const response = await openai.images.generate({
@@ -202,7 +218,7 @@ async function processGeneration(
       mode: mode as any,
       source_asset_id: inputAsset.id,
       prompt_version: promptVersion,
-      prompt_payload: { ...promptPayload, prompt },
+      prompt_payload: promptPayload, // Store the full audit trail
       width: 1024,
       height: 1024,
       mime_type: 'image/png',
@@ -227,30 +243,6 @@ async function processGeneration(
       status: 'failed',
       error: error instanceof Error ? error.message : 'Generation failed',
     })
-  }
-}
-
-/**
- * Build prompt based on mode and input asset
- */
-function buildPrompt(mode: string, inputAsset: any, promptPayload: any): string {
-  const baseDescription = promptPayload.description || 'a product'
-
-  switch (mode) {
-    case 'main_white':
-      return `Create a professional product photo of ${baseDescription} on a pure white background. The product should be centered, well-lit, and showcase all key features clearly. High-resolution, commercial photography style, perfect for e-commerce.`
-
-    case 'lifestyle':
-      return `Create a lifestyle product photo of ${baseDescription} being used in a real-world setting. Show the product in context with natural lighting, authentic environment, and relatable scenario. The image should feel organic and appealing to customers.`
-
-    case 'feature_callout':
-      return `Create a product photo of ${baseDescription} that highlights its key features and benefits. Use visual cues like arrows, labels, or zoom-ins to emphasize important details. Clean, informative, and marketing-focused composition.`
-
-    case 'packaging':
-      return `Create a product photo of ${baseDescription} in its retail packaging. Show the complete package design from an appealing angle, with clear branding visible. Professional retail photography style suitable for online stores.`
-
-    default:
-      return `Create a high-quality professional photo of ${baseDescription}.`
   }
 }
 
