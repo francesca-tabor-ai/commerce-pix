@@ -88,6 +88,11 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 4. Deploy!
 
+## Documentation
+
+- 📖 [Testing Guide](docs/TESTING.md) - How to test authentication
+- 📋 [Project Summary](docs/PROJECT_SUMMARY.md) - Complete project overview
+
 ## Learn More
 
 - [Next.js Documentation](https://nextjs.org/docs)
