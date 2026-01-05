@@ -170,7 +170,7 @@ export function OutputsGallery({ outputs, onRefresh, onCreateVariation }: Output
           {loading ? (
             <OutputsGallerySkeleton count={outputs.length > 0 ? outputs.length : 4} />
           ) : filteredOutputs.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" role="list" aria-label="Generated images">
               {filteredOutputs.map((output) => (
                 <Card key={output.id} className="overflow-hidden group hover:shadow-lg transition-shadow">
                   {/* Image */}

@@ -41,16 +41,26 @@ export function ModeSelector({ selectedMode, onModeChange }: ModeSelectorProps) 
   return (
     <Card>
       <CardContent className="p-6 space-y-3">
-        <h3 className="text-sm font-semibold mb-3">Generation Mode</h3>
+        <h3 className="text-sm font-semibold mb-3" id="mode-selector-label">
+          Generation Mode
+        </h3>
 
-        <div className="space-y-2">
+        <div role="radiogroup" aria-labelledby="mode-selector-label" className="space-y-2">
           {MODES.map((mode) => {
             const isSelected = selectedMode === mode.id
             return (
               <button
                 key={mode.id}
+                role="radio"
+                aria-checked={isSelected}
                 onClick={() => onModeChange(mode.id)}
-                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onModeChange(mode.id)
+                  }
+                }}
+                className={`w-full text-left p-4 rounded-lg border-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
                   isSelected
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:border-primary/50 hover:bg-muted/50'
@@ -58,7 +68,7 @@ export function ModeSelector({ selectedMode, onModeChange }: ModeSelectorProps) 
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 flex-1">
-                    <span className="text-2xl">{mode.icon}</span>
+                    <span className="text-2xl" aria-hidden="true">{mode.icon}</span>
                     <div className="flex-1">
                       <div className="font-semibold text-sm mb-1">{mode.name}</div>
                       <div className="text-xs text-muted-foreground">
@@ -68,7 +78,7 @@ export function ModeSelector({ selectedMode, onModeChange }: ModeSelectorProps) 
                   </div>
                   {isSelected && (
                     <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                      <Check className="h-3 w-3 text-primary-foreground" />
+                      <Check className="h-3 w-3 text-primary-foreground" aria-hidden="true" />
                     </div>
                   )}
                 </div>

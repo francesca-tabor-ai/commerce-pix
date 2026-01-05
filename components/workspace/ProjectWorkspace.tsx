@@ -9,7 +9,7 @@ import { UploadWidget } from './UploadWidget'
 import { ProductFields } from './ProductFields'
 import { ModeSelector } from './ModeSelector'
 import { OutputsGallery } from './OutputsGallery'
-import { GenerationProgress } from '../GenerationProgress'
+import GenerationProgress from '../GenerationProgress'
 import { UpgradeModal } from '../billing/UpgradeModal'
 import type { Asset } from '@/lib/db/asset-types'
 
@@ -168,15 +168,18 @@ export function ProjectWorkspace({ projectId, initialOutputs }: ProjectWorkspace
               disabled={generating || !uploadedAssetId}
               size="lg"
               className="w-full"
+              aria-label={generating ? 'Generating image' : 'Generate image'}
+              aria-live="polite"
+              aria-busy={generating}
             >
               {generating ? (
                 <>
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" aria-hidden="true" />
                   Generating...
                 </>
               ) : (
                 <>
-                  <Wand2 className="h-5 w-5 mr-2" />
+                  <Wand2 className="h-5 w-5 mr-2" aria-hidden="true" />
                   Generate Image
                 </>
               )}

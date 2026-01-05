@@ -118,18 +118,28 @@ export function UploadWidget({ projectId, onUploadComplete }: UploadWidgetProps)
   return (
     <Card>
       <CardContent className="p-6">
-        <h3 className="text-sm font-semibold mb-3">Product Photo</h3>
+        <h3 className="text-sm font-semibold mb-3" id="upload-label">Product Photo</h3>
 
         {!uploadedFile ? (
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            role="button"
+            tabIndex={uploading ? -1 : 0}
+            aria-labelledby="upload-label"
+            aria-describedby="upload-instructions"
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
               isDragging
                 ? 'border-primary bg-primary/5'
                 : 'border-muted-foreground/25 hover:border-primary/50'
             }`}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                document.getElementById('file-upload')?.click()
+              }
+            }}
           >
             {uploading ? (
               <div className="flex flex-col items-center gap-4 w-full max-w-xs mx-auto">
@@ -155,11 +165,11 @@ export function UploadWidget({ projectId, onUploadComplete }: UploadWidgetProps)
               </div>
             ) : (
               <>
-                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" aria-hidden="true" />
                 <p className="text-sm font-medium mb-1">
                   Drag and drop your product photo
                 </p>
-                <p className="text-xs text-muted-foreground mb-4">
+                <p id="upload-instructions" className="text-xs text-muted-foreground mb-4">
                   or click to browse (PNG, JPG, max 10MB)
                 </p>
                 <input
@@ -169,6 +179,7 @@ export function UploadWidget({ projectId, onUploadComplete }: UploadWidgetProps)
                   accept="image/*"
                   onChange={handleFileSelect}
                   disabled={uploading}
+                  aria-label="Upload product photo"
                 />
                 <label htmlFor="file-upload">
                   <Button variant="outline" size="sm" asChild>

@@ -101,7 +101,11 @@ export function DashboardOutputGallery({ outputs }: DashboardOutputGalleryProps)
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div 
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+      role="list"
+      aria-label="Recent generated images"
+    >
       {outputs.map((asset) => (
         <Card key={asset.id} className="overflow-hidden group hover:shadow-lg transition-shadow">
           {/* Image */}
