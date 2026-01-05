@@ -4,6 +4,26 @@ import type { Asset, NewAsset, UpdateAsset, AssetStatistic } from './asset-types
 // Server-side functions (for Server Components and Server Actions)
 
 /**
+ * Get all assets for a specific project
+ */
+export async function getAssetsByProject(projectId: string): Promise<Asset[] | null> {
+  const supabase = await createServerClient()
+  
+  const { data, error } = await supabase
+    .from('assets')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+  
+  if (error) {
+    console.error('Error fetching assets by project:', error)
+    return null
+  }
+  
+  return data as Asset[]
+}
+
+/**
  * Get all assets for the current user
  */
 export async function getAssets(): Promise<Asset[]> {
