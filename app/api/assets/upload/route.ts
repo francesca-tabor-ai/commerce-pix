@@ -131,9 +131,10 @@ export async function POST(request: NextRequest) {
       storage_path: uploadResult.path!,
     })
 
-    // Return simple response with asset ID
+    // Return simple response with asset ID and project ID
     return NextResponse.json({
       assetId,
+      projectId,
     })
   } catch (error) {
     console.error('Asset upload error:', error)
