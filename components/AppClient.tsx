@@ -13,6 +13,7 @@ import type { Project } from '@/lib/db/types'
 import type { Asset } from '@/lib/db/asset-types'
 import UploadComponent from '@/components/UploadComponent'
 import ModeSelector from '@/components/ModeSelector'
+import GenerationProgress from '@/components/GenerationProgress'
 
 type Mode = 'main_white' | 'lifestyle' | 'feature_callout' | 'packaging'
 
@@ -44,6 +45,7 @@ export default function AppClient({ userId }: { userId: string }) {
     scene: '',
   })
   const [generating, setGenerating] = useState(false)
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
 
   // Gallery state
   const [assets, setAssets] = useState<Asset[]>([])
@@ -150,11 +152,10 @@ export default function AppClient({ userId }: { userId: string }) {
       const data = await response.json()
 
       if (response.ok) {
-        alert('Generation started! Check the results gallery in a few moments.')
-        // Refresh assets after a delay to show the new output
-        setTimeout(() => loadAssets(), 5000)
-        setTimeout(() => loadAssets(), 15000)
+        // Store job ID for progress tracking
+        setCurrentJobId(data.job.id)
       } else {
+        setGenerating(false)
         if (response.status === 429) {
           alert(`Rate limit exceeded: ${data.message}`)
         } else {
@@ -162,10 +163,21 @@ export default function AppClient({ userId }: { userId: string }) {
         }
       }
     } catch (error) {
-      alert(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
       setGenerating(false)
+      alert(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
+  }
+
+  const handleGenerationComplete = async () => {
+    // Refresh gallery to show new output
+    await loadAssets()
+    setGenerating(false)
+    setCurrentJobId(null)
+  }
+
+  const handleDismissProgress = () => {
+    setGenerating(false)
+    setCurrentJobId(null)
   }
 
   const inputAssets = assets.filter(a => a.kind === 'input')
@@ -325,6 +337,15 @@ export default function AppClient({ userId }: { userId: string }) {
                   </Button>
                 </CardContent>
               </Card>
+
+              {/* Generation Progress */}
+              {currentJobId && (
+                <GenerationProgress
+                  jobId={currentJobId}
+                  onComplete={handleGenerationComplete}
+                  onDismiss={handleDismissProgress}
+                />
+              )}
 
               {/* Results Gallery */}
               <Card>
