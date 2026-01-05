@@ -19,13 +19,14 @@ const openai = new OpenAI({
 /**
  * POST /api/generate
  * 
- * Trigger AI image generation using OpenAI DALL-E 2 (image editing)
+ * Generate AI product images using OpenAI DALL-E 2 image editing
  * 
- * Takes an uploaded product image and transforms it based on the selected mode
- * (main_white, lifestyle, feature_callout, packaging) using structured prompts.
+ * Transforms uploaded product images based on selected mode using Amazon-focused prompts.
+ * Handles credits, job tracking, OpenAI integration, and output storage.
  * 
  * Request (JSON):
- * - inputAssetId: string (required) - ID of the input asset
+ * - projectId: string (required) - Project UUID
+ * - inputAssetId: string (required) - Input asset UUID
  * - mode: 'main_white' | 'lifestyle' | 'feature_callout' | 'packaging' (required)
  * - productCategory: string (optional) - e.g., "electronics", "clothing"
  * - brandTone: string (optional) - e.g., "professional", "luxury"
@@ -33,18 +34,33 @@ const openai = new OpenAI({
  * - constraints: string[] (optional) - Additional constraints
  * - promptVersion: string (optional, default: 'v1')
  * 
- * Process:
- * 1. Create generation_jobs row (status: 'queued')
- * 2. Fetch input image from storage
- * 3. Call OpenAI DALL-E 2 image edit API (image + prompt)
- * 4. Receive base64 image response
- * 5. Upload output to commercepix-outputs bucket
- * 6. Create assets row (kind: 'output', source_asset_id: input)
- * 7. Update generation_jobs (status: 'succeeded' or 'failed')
+ * Flow:
+ * 1. Authenticate user
+ * 2. Validate project ownership
+ * 3. Check credits >= 1 (return 402 if insufficient)
+ * 4. Create generation_jobs row (status: 'queued')
+ * 5. Process generation asynchronously:
+ *    a. Update job status to 'running'
+ *    b. Build Amazon-compliant prompt
+ *    c. Call OpenAI DALL-E 2 API
+ *    d. Upload output to commercepix-outputs bucket
+ *    e. Create assets row (kind='output', source_asset_id, mode, prompt_payload)
+ *    f. Spend 1 credit (insert into credit_ledger)
+ *    g. Mark job 'succeeded'
+ * 6. On failure: Mark job 'failed', do NOT spend credits
  * 
- * Response:
- * - job: Generation job object
- * - message: Status message
+ * Response (200):
+ * - jobId: string - Generation job UUID
+ * - message: string - Status message
+ * - rateLimit: object - Rate limit info
+ * 
+ * Errors:
+ * - 400: Missing/invalid parameters
+ * - 402: Insufficient credits (code: 'NO_CREDITS')
+ * - 403: Unauthorized (not asset owner)
+ * - 404: Asset not found
+ * - 429: Rate limit exceeded
+ * - 500: Server error
  */
 export async function POST(request: NextRequest) {
   try {
@@ -108,6 +124,7 @@ export async function POST(request: NextRequest) {
     // Parse request body
     const body = await request.json()
     const {
+      projectId,
       inputAssetId,
       mode,
       productCategory,
@@ -118,6 +135,13 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Validate required fields
+    if (!projectId) {
+      return NextResponse.json(
+        { error: 'Project ID is required' },
+        { status: 400 }
+      )
+    }
+
     if (!inputAssetId) {
       return NextResponse.json(
         { error: 'Input asset ID is required' },
@@ -146,17 +170,28 @@ export async function POST(request: NextRequest) {
     // Verify user owns the input asset
     if (inputAsset.user_id !== user.id) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Unauthorized: You do not own this asset' },
         { status: 403 }
       )
     }
 
+    // Verify input asset belongs to the specified project
+    if (inputAsset.project_id !== projectId) {
+      return NextResponse.json(
+        { error: 'Asset does not belong to the specified project' },
+        { status: 400 }
+      )
+    }
+
+    // Estimate cost (DALL-E 2 edit: $0.020 per image = 2 cents)
+    const estimatedCostCents = 2
+
     // Create generation job (status defaults to 'queued' in createGenerationJob)
     const job = await createGenerationJob({
-      project_id: inputAsset.project_id,
+      project_id: projectId,
       mode,
       input_asset_id: inputAssetId,
-      cost_cents: 0, // Will be updated after generation
+      cost_cents: estimatedCostCents,
     })
 
     if (!job) {
@@ -166,8 +201,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Start generation asynchronously (in a real app, this would be a background job)
-    // For MVP, we'll do it inline but return the job immediately
+    // Start generation asynchronously
+    // Note: Credits are only spent AFTER successful generation
+    // If generation fails, job is marked 'failed' and credits are NOT spent
     processGeneration(
       job.id,
       inputAsset,
@@ -182,21 +218,22 @@ export async function POST(request: NextRequest) {
       user.id
     ).catch(error => console.error('Background generation error:', error))
 
-    // Record usage AFTER successful job creation
+    // Record usage AFTER successful job creation (for rate limiting)
     await recordGenerationUsage(user.id)
 
-    // Include rate limit info in response
+    // Return job ID and status
     return NextResponse.json({
-      job,
+      jobId: job.id,
       message: 'Generation job created and processing',
+      status: 'queued',
       rateLimit: {
         perMinute: {
-          current: rateLimitCheck.perMinute.current + 1, // +1 for this request
+          current: rateLimitCheck.perMinute.current + 1,
           limit: rateLimitCheck.perMinute.limit,
           remaining: Math.max(0, rateLimitCheck.perMinute.remaining - 1),
         },
         perDay: {
-          current: rateLimitCheck.perDay.current + 1, // +1 for this request
+          current: rateLimitCheck.perDay.current + 1,
           limit: rateLimitCheck.perDay.limit,
           remaining: Math.max(0, rateLimitCheck.perDay.remaining - 1),
         },
@@ -286,11 +323,11 @@ async function processGeneration(
     // Convert base64 to buffer
     const imageBuffer = Buffer.from(b64Image, 'base64')
 
-    // Generate output asset ID
-    const outputAssetId = uuidv4()
+    // Generate unique filename for storage
+    const uniqueFilename = uuidv4()
 
     // Upload to storage
-    const storagePath = `${userId}/${inputAsset.project_id}/${outputAssetId}.png`
+    const storagePath = `${userId}/${inputAsset.project_id}/${uniqueFilename}.png`
     const uploadResult = await uploadFile(
       BUCKETS.OUTPUTS,
       storagePath,
@@ -307,6 +344,7 @@ async function processGeneration(
     }
 
     // Create output asset record
+    // Note: ID and user_id are auto-generated/set by createAsset
     const outputAsset = await createAsset({
       project_id: inputAsset.project_id,
       kind: 'output',
@@ -320,27 +358,51 @@ async function processGeneration(
       storage_path: storagePath,
     })
 
-    // Calculate cost (DALL-E 2 edit: $0.020 per image = 2 cents)
+    if (!outputAsset) {
+      throw new Error('Failed to create output asset record')
+    }
+
+    console.log(`   Created output asset: ${outputAsset.id}`)
+
+    // Calculate actual cost (DALL-E 2 edit: $0.020 per image = 2 cents)
     const costCents = 2
 
-    // Update job as succeeded
+    // Spend 1 credit for the successful generation
+    // This must happen BEFORE marking job as succeeded
+    // If credit spending fails, the entire generation is rolled back
+    const creditResult = await spendCredits(userId, 1, 'generation', 'job', jobId)
+    
+    if (!creditResult.success) {
+      throw new Error(`Failed to spend credits: ${creditResult.error}`)
+    }
+
+    console.log(`   Credits spent: 1`)
+
+    // Update job as succeeded (only after credits are spent)
     await updateGenerationJob(jobId, {
       status: 'succeeded',
       cost_cents: costCents,
     })
 
-    // Spend 1 credit for the successful generation
-    await spendCredits(userId, 1, 'generation', 'job', jobId)
-
-    console.log(`Generation job ${jobId} completed successfully. Output asset: ${outputAssetId}, 1 credit spent`)
+    console.log(`✅ Generation job ${jobId} completed successfully`)
+    console.log(`   Output asset: ${outputAsset.id}`)
+    console.log(`   Storage path: ${storagePath}`)
+    console.log(`   Cost: $${(costCents / 100).toFixed(2)}`)
   } catch (error) {
-    console.error(`Generation job ${jobId} failed:`, error)
+    console.error(`❌ Generation job ${jobId} failed:`, error)
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown generation error'
 
     // Update job as failed
+    // CRITICAL: Do NOT spend credits when generation fails
     await updateGenerationJob(jobId, {
       status: 'failed',
-      error: error instanceof Error ? error.message : 'Generation failed',
+      error: errorMessage,
     })
+
+    console.log(`   Job ${jobId} marked as failed`)
+    console.log(`   Credits NOT spent (generation failed)`)
+    console.log(`   Error: ${errorMessage}`)
   }
 }
 
