@@ -417,6 +417,13 @@ function getCategoryContext(category?: string): string {
 /**
  * main_white_v1: Professional product photo on pure white background
  * Ideal for: Amazon main images, product catalogs, e-commerce listings
+ * 
+ * STRICTEST MODE - Amazon Main Image Compliance:
+ * - PURE white background (RGB: 255, 255, 255) - no exceptions
+ * - NO props, accessories, or additional objects
+ * - Realistic product representation only
+ * - Centered composition
+ * - NO text overlays, labels, or words anywhere
  */
 export function buildMainWhitePrompt(inputs: PromptInputs): PromptResult {
   // Validate and sanitize inputs with compliance guardrails
@@ -426,31 +433,48 @@ export function buildMainWhitePrompt(inputs: PromptInputs): PromptResult {
   const categoryContext = getCategoryContext(sanitizedInputs.productCategory)
   const tone = getToneDescription(sanitizedInputs.brandTone)
   
-  const template = `Create a professional product photography image of ${productDesc} (${categoryContext}).
+  const template = `Create a professional product photography image of ${productDesc} (${categoryContext}) on a PURE WHITE BACKGROUND.
+
+CRITICAL REQUIREMENTS (NO EXCEPTIONS):
+- Background: PURE white (RGB: 255, 255, 255) - absolutely no gradient, texture, or color
+- Product ONLY: No props, no accessories, no additional objects, no staging items
+- NO text overlays: No words, labels, captions, or typography anywhere in the image
+- Realistic representation: Product must look exactly as it would in real life
+- Centered: Product perfectly centered in frame, taking up 80-85% of image
 
 COMPOSITION:
-- Pure white background (RGB: 255, 255, 255)
-- Product centered in frame
-- Front-facing primary angle
-- Product takes up 80-85% of frame
-- Slight shadow under product for depth
+- Product centered horizontally and vertically
+- Front-facing primary angle showing product clearly
+- Product fills 80-85% of frame for maximum visibility
+- Minimal drop shadow under product for depth (subtle, realistic)
+- Clean edges with no background artifacts
 
 LIGHTING:
-- Bright, even lighting from multiple angles
-- No harsh shadows
-- Proper exposure with no overblown highlights
-- Natural color representation
+- Bright, even, professional studio lighting
+- Soft light from multiple angles to eliminate harsh shadows
+- Proper exposure with accurate colors
+- No overblown highlights or dark shadows
+- Natural color representation of product
 
-STYLE:
+PHOTOGRAPHY QUALITY:
 - ${tone} aesthetic
-- Commercial photography quality
-- Professional studio setup
-- Sharp focus throughout product
+- High-resolution commercial photography standard
+- Sharp focus throughout entire product
+- Professional studio setup quality
+- Suitable for Amazon main image requirements
+
+FORBIDDEN ELEMENTS (STRICTLY PROHIBITED):
+- NO text, words, labels, or typography
+- NO props, staging items, or accessories
+- NO people, hands, or body parts
+- NO backgrounds other than pure white
+- NO decorative elements or overlays
+- NO shadows except subtle product drop shadow
 
 REQUIREMENTS:
 ${buildConstraintsText(sanitizedInputs.constraints)}
 
-Create a high-quality e-commerce product image suitable for Amazon main image guidelines.`
+Create a pristine, professional product image that meets Amazon's strictest main image guidelines.`
 
   return {
     prompt: template,
@@ -471,6 +495,13 @@ Create a high-quality e-commerce product image suitable for Amazon main image gu
 /**
  * lifestyle_v1: Product in real-world context
  * Ideal for: Secondary images, lifestyle shots, usage scenarios
+ * 
+ * KEY REQUIREMENTS:
+ * - Realistic scene that could exist in real life
+ * - DO NOT invent included items or accessories
+ * - Keep product representation accurate and realistic
+ * - Props are for context ONLY, not to suggest they're included
+ * - No misrepresentation of what customer receives
  */
 export function buildLifestylePrompt(inputs: PromptInputs): PromptResult {
   // Validate and sanitize inputs with compliance guardrails
@@ -480,36 +511,54 @@ export function buildLifestylePrompt(inputs: PromptInputs): PromptResult {
   const categoryContext = getCategoryContext(sanitizedInputs.productCategory)
   const tone = getToneDescription(sanitizedInputs.brandTone)
   
-  const template = `Create a lifestyle product photography image showing ${productDesc} (${categoryContext}) in a real-world setting.
+  const template = `Create a lifestyle product photography image showing ${productDesc} (${categoryContext}) in a realistic, authentic real-world setting.
 
-SCENE:
-- Natural, authentic environment where product would be used
-- Product in context but clearly visible as the focal point
-- Realistic setting with complementary props or background
+CRITICAL ACCURACY REQUIREMENTS:
+- Product representation must be 100% accurate to actual product
+- DO NOT invent additional items, accessories, or components
+- Props are for CONTEXT ONLY - must not suggest they are included with product
+- Scene must be achievable in real life - no fantasy or impossible scenarios
+- Product shown EXACTLY as customer will receive it (no embellishments)
+
+SCENE COMPOSITION:
+- Natural, authentic environment where product would realistically be used
+- Product clearly visible as primary focal point
+- Environmental props provide context without implying inclusion
 - Human element optional (hands using product, or lifestyle context)
+- Realistic setting that enhances product without misrepresenting it
 
-COMPOSITION:
-- Product prominent but naturally integrated into scene
-- Rule of thirds or other compositionally pleasing arrangement
-- Depth of field that keeps product in sharp focus
-- Environmental elements support but don't distract from product
+PRODUCT FOCUS:
+- Product remains the clear hero of the image
+- Product in sharp focus with clear visibility
+- Complementary background elements stay secondary
+- Rule of thirds or compositionally pleasing arrangement
+- Depth of field keeps product prominent
 
-LIGHTING:
+LIGHTING & ATMOSPHERE:
 - Natural or natural-looking lighting
-- Warm, inviting atmosphere
-- Proper exposure across the scene
-- Highlights product features
+- Warm, inviting, and authentic atmosphere
+- Proper exposure showing product accurately
+- Realistic lighting that could exist in actual setting
+- Colors rendered accurately without enhancement
 
 STYLE:
 - ${tone} aesthetic
-- Authentic and relatable
+- Authentic and genuinely relatable
 - High-quality lifestyle photography
-- Aspirational yet achievable scene
+- Aspirational yet realistically achievable scene
+- Professional but not overly staged
+
+FORBIDDEN ELEMENTS:
+- NO invented accessories that might imply inclusion
+- NO additional product components not actually included
+- NO fantasy or impossible scenarios
+- NO misleading product presentation
+- NO props that suggest a bundle or set
 
 REQUIREMENTS:
 ${buildConstraintsText(sanitizedInputs.constraints)}
 
-Create a compelling lifestyle image that shows the product in context while maintaining e-commerce standards.`
+Create an authentic lifestyle image that shows product in realistic context while maintaining complete accuracy about what's included.`
 
   return {
     prompt: template,
@@ -530,6 +579,12 @@ Create a compelling lifestyle image that shows the product in context while main
 /**
  * feature_callout_v1: Highlight specific product features
  * Ideal for: Feature highlights, infographic-style images, benefit callouts
+ * 
+ * KEY REQUIREMENTS:
+ * - Text overlays ARE allowed (ONLY mode where text is permitted)
+ * - Highlight exactly 3 key benefits/features
+ * - Clean e-commerce style suitable for Amazon
+ * - Professional, informative, not promotional
  */
 export function buildFeatureCalloutPrompt(inputs: PromptInputs): PromptResult {
   // Validate and sanitize inputs with compliance guardrails
@@ -539,36 +594,44 @@ export function buildFeatureCalloutPrompt(inputs: PromptInputs): PromptResult {
   const categoryContext = getCategoryContext(sanitizedInputs.productCategory)
   const tone = getToneDescription(sanitizedInputs.brandTone)
   
-  const template = `Create a feature callout product photography image for ${productDesc} (${categoryContext}) that highlights key features and benefits.
+  const template = `Create a feature callout product photography image for ${productDesc} (${categoryContext}) that highlights EXACTLY 3 key product benefits.
 
 COMPOSITION:
 - Clean, uncluttered background (light gray or white)
-- Product positioned to showcase important features
-- Multiple angles or close-up details if beneficial
-- Visual hierarchy emphasizing key selling points
+- Product positioned centrally to showcase features
+- Space allocated for 3 benefit callouts around product
+- Visual hierarchy with product as primary focal point
+
+TEXT OVERLAY REQUIREMENTS (ONLY mode where text is allowed):
+- Exactly 3 benefit callouts with short, factual descriptions
+- Text must be minimal, informative, and professional
+- Font should be clean, modern, sans-serif style
+- Text color: dark gray or black for readability
+- Text placement: strategically positioned near relevant product features
+- Each callout: 3-5 words maximum per benefit
 
 VISUAL ELEMENTS:
-- Subtle visual cues pointing to key features (arrows, circles, or lines)
-- Close-up insets showing important details or textures
-- Zoom-in sections highlighting specific areas
-- Clean, minimal graphic elements that enhance rather than distract
+- Subtle arrows, lines, or circles connecting text to features
+- Minimal graphic elements (dots, icons) that enhance clarity
+- Clean, professional infographic style
+- No decorative elements that distract from product
 
 LIGHTING:
-- Bright, clear lighting
-- Detail-revealing illumination
-- Consistent lighting across all elements
-- No harsh shadows that obscure features
+- Bright, clear, professional lighting
+- Detail-revealing illumination on key features
+- Consistent lighting across entire image
+- No harsh shadows obscuring product details
 
 STYLE:
 - ${tone} aesthetic
-- Informative and clear
-- Professional infographic-style presentation
-- Marketing-focused but not cluttered
+- Clean e-commerce presentation
+- Professional and informative (not promotional)
+- Amazon-ready image quality
 
 REQUIREMENTS:
 ${buildConstraintsText(sanitizedInputs.constraints)}
 
-Create an informative feature callout image that clearly communicates product benefits while maintaining professional quality.`
+Create a professional feature callout image with exactly 3 benefits highlighted, suitable for Amazon product listings.`
 
   return {
     prompt: template,
@@ -589,6 +652,13 @@ Create an informative feature callout image that clearly communicates product be
 /**
  * packaging_v1: Product in retail packaging
  * Ideal for: Package shots, unboxing previews, retail displays
+ * 
+ * KEY REQUIREMENTS:
+ * - Show product + packaging accurately
+ * - NO fake claims, certifications, or seals
+ * - NO invented badges, awards, or quality marks
+ * - Generic, professional packaging design only
+ * - Realistic retail presentation
  */
 export function buildPackagingPrompt(inputs: PromptInputs): PromptResult {
   // Validate and sanitize inputs with compliance guardrails
@@ -598,39 +668,65 @@ export function buildPackagingPrompt(inputs: PromptInputs): PromptResult {
   const categoryContext = getCategoryContext(sanitizedInputs.productCategory)
   const tone = getToneDescription(sanitizedInputs.brandTone)
   
-  const template = `Create a product packaging photography image showing ${productDesc} (${categoryContext}) in its retail package.
+  const template = `Create a product packaging photography image showing ${productDesc} (${categoryContext}) in accurate, professional retail packaging.
+
+CRITICAL ACCURACY REQUIREMENTS:
+- Product and packaging shown EXACTLY as customer will receive
+- NO fake certifications, seals, or badges (e.g., "USDA Organic", "FDA Approved")
+- NO award marks, quality seals, or invented credentials
+- NO specific ingredient claims or unverified health statements
+- NO trademarked symbols (®, ™) or patent claims
+- Packaging design must be generic and achievable in real production
 
 COMPOSITION:
-- Product shown in complete retail packaging
-- Angled view that shows front panel and side/top for dimension
-- Package takes up 75-85% of frame
-- Clean white or light gray background
-- Package positioned at appealing 3/4 angle
+- Product shown in complete, professional retail packaging
+- Angled 3/4 view showing front panel plus side/top for dimension
+- Package takes up 75-85% of frame for clear visibility
+- Clean white or light neutral gray background
+- Package positioned at appealing, shelf-ready angle
 
 PACKAGING PRESENTATION:
-- Packaging appears professional and retail-ready
-- Brand elements visible but not specific competitor logos
-- Package design appears modern and shelf-worthy
-- Clear view of what's inside (if window box) or package graphics
-- Sealed, new condition appearance
+- Professional, retail-ready packaging appearance
+- Generic brand elements (no competitor logos)
+- Modern, shelf-worthy package design
+- Clear view of actual product inside (if window box)
+- Sealed, pristine new condition
+- Realistic printing and materials quality
 
-LIGHTING:
-- Professional studio lighting
-- Even illumination showing package details
-- Minimal glare on any plastic/glossy surfaces
-- Colors rendered accurately
-- Shadows add depth without obscuring details
+PACKAGE DETAILS:
+- Simple, clean graphics appropriate for retail
+- Product name and category clearly visible
+- Generic descriptive text (no fake claims)
+- Professional color scheme and typography
+- Barcode/UPC area shown but not readable
+- Realistic packaging materials (cardboard, plastic, etc.)
+
+LIGHTING & PHOTOGRAPHY:
+- Professional studio lighting for retail quality
+- Even illumination showing all package details
+- Minimal glare on plastic/glossy surfaces
+- Accurate color reproduction of packaging
+- Subtle shadows for depth without obscuring information
 
 STYLE:
 - ${tone} aesthetic
-- Retail photography quality
-- Professional and polished
-- Suitable for online and offline retail
+- High-quality retail product photography
+- Professional and polished presentation
+- Suitable for e-commerce and in-store display
+- Realistic and achievable packaging design
+
+STRICTLY FORBIDDEN:
+- NO certification seals or badges (organic, FDA, medical, etc.)
+- NO award marks or "best in class" claims
+- NO trademarked symbols or patent claims
+- NO specific health claims or ingredient guarantees
+- NO competitor logos or brand references
+- NO quality marks that require actual certification
 
 REQUIREMENTS:
 ${buildConstraintsText(sanitizedInputs.constraints)}
 
-Create a high-quality packaging image suitable for e-commerce and retail display.`
+Create an accurate, professional packaging image with realistic retail presentation and NO fake claims or certifications.`
 
   return {
     prompt: template,
