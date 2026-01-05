@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert } from '@/components/ui/primitives/Alert'
 import { Sparkles, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { initializeTrial } from '@/app/actions/trial'
 
 export default function AuthPage() {
   const router = useRouter()
@@ -102,8 +103,11 @@ export default function AuthPage() {
         })
       } else {
         toast.success('Account created!', {
-          description: 'Setting up your workspace...',
+          description: 'Setting up your trial...',
         })
+        
+        // Initialize trial subscription with 20 credits
+        await initializeTrial()
         
         // Handle post-signup onboarding
         await handlePostLoginOnboarding()

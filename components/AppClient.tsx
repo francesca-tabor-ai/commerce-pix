@@ -15,6 +15,7 @@ import UploadComponent from '@/components/UploadComponent'
 import ModeSelector from '@/components/ModeSelector'
 import GenerationProgress from '@/components/GenerationProgress'
 import AssetGallery from '@/components/AssetGallery'
+import { UpgradeModal } from '@/components/billing/UpgradeModal'
 
 type Mode = 'main_white' | 'lifestyle' | 'feature_callout' | 'packaging'
 
@@ -47,6 +48,9 @@ export default function AppClient({ userId }: { userId: string }) {
   })
   const [generating, setGenerating] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+
+  // Upgrade modal state
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   // Gallery state
   const [assets, setAssets] = useState<Asset[]>([])
@@ -157,7 +161,10 @@ export default function AppClient({ userId }: { userId: string }) {
         setCurrentJobId(data.job.id)
       } else {
         setGenerating(false)
-        if (response.status === 429) {
+        if (response.status === 402) {
+          // No credits - show upgrade modal
+          setShowUpgradeModal(true)
+        } else if (response.status === 429) {
           alert(`Rate limit exceeded: ${data.message}`)
         } else {
           alert(`Generation failed: ${data.error}`)
@@ -387,6 +394,13 @@ export default function AppClient({ userId }: { userId: string }) {
           )}
         </div>
       </div>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        open={showUpgradeModal}
+        onOpenChange={setShowUpgradeModal}
+        reason="no_credits"
+      />
     </div>
   )
 }

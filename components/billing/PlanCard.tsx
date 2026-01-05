@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, Sparkles } from 'lucide-react'
+import { CheckCircle2, Sparkles, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Plan } from '@/lib/db/billing-types'
 
@@ -26,15 +26,39 @@ export function PlanCard({ plan, currentPlanId, userId }: PlanCardProps) {
   const isDowngrade = thisIndex < currentIndex && currentIndex !== -1
 
   const handleSelectPlan = async () => {
+    if (isCurrent) return
+    
     setLoading(true)
     
     try {
-      // TODO: Implement Stripe checkout or plan change logic
-      toast.info('Coming soon', {
-        description: 'Plan changes will be available once payment processing is integrated'
+      const response = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ planId: plan.id }),
       })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to process checkout')
+      }
+
+      // In MVP, this returns "Not configured"
+      // In production, this would redirect to Stripe
+      if (data.url) {
+        // Redirect to Stripe checkout
+        window.location.href = data.url
+      } else {
+        // Show "not configured" message
+        toast.info('Payment processing not configured', {
+          description: data.message || 'Stripe integration coming soon'
+        })
+      }
     } catch (error) {
-      toast.error('Failed to change plan', {
+      console.error('Checkout error:', error)
+      toast.error('Failed to start checkout', {
         description: error instanceof Error ? error.message : 'Please try again'
       })
     } finally {
@@ -79,15 +103,23 @@ export function PlanCard({ plan, currentPlanId, userId }: PlanCardProps) {
           disabled={isCurrent || loading}
           onClick={handleSelectPlan}
         >
-          {isCurrent && 'Current Plan'}
-          {!isCurrent && isUpgrade && (
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
+            </>
+          ) : isCurrent ? (
+            'Current Plan'
+          ) : isUpgrade ? (
             <>
               <Sparkles className="mr-2 h-4 w-4" />
               Upgrade
             </>
+          ) : isDowngrade ? (
+            'Downgrade'
+          ) : (
+            'Select Plan'
           )}
-          {!isCurrent && isDowngrade && 'Downgrade'}
-          {!isCurrent && !isUpgrade && !isDowngrade && 'Select Plan'}
         </Button>
 
         {!isCurrent && plan.overage_cents > 0 && (

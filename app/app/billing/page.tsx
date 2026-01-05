@@ -7,10 +7,12 @@ import {
 } from '@/lib/db/billing'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { AppHeader } from '@/components/app/AppHeader'
-import { CheckCircle2, CreditCard, AlertCircle, TrendingUp, Calendar } from 'lucide-react'
+import { CheckCircle2, CreditCard, AlertCircle, TrendingUp, Calendar, Sparkles } from 'lucide-react'
 import { PlanCard } from '@/components/billing/PlanCard'
 import { CancelPlanToggle } from '@/components/billing/CancelPlanToggle'
+import { PlanSelectionModal } from '@/components/billing/PlanSelectionModal'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,6 +88,16 @@ export default async function BillingPage() {
                       </div>
                     </div>
                   </div>
+                  <PlanSelectionModal 
+                    plans={allPlans} 
+                    currentPlanId={subscription.plan_id}
+                    trigger={
+                      <Button variant="outline">
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Change Plan
+                      </Button>
+                    }
+                  />
                 </div>
 
                 {subscription.cancel_at_period_end && (
@@ -221,10 +233,17 @@ export default async function BillingPage() {
 
         {/* Available Plans */}
         <div>
-          <h2 className="text-2xl font-bold mb-4">Available Plans</h2>
-          <p className="text-muted-foreground mb-6">
-            {subscription ? 'Upgrade or downgrade your plan' : 'Choose a plan to get started'}
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-bold">Available Plans</h2>
+              <p className="text-muted-foreground mt-1">
+                {subscription ? 'Upgrade or downgrade your plan' : 'Choose a plan to get started'}
+              </p>
+            </div>
+            <PlanSelectionModal 
+              plans={allPlans} 
+              currentPlanId={subscription?.plan_id || null}
+            />
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {allPlans.map(plan => (

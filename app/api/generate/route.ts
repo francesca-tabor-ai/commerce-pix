@@ -5,6 +5,7 @@ import { createGenerationJob, updateGenerationJob } from '@/lib/db/generation-jo
 import { uploadFile, getSignedUrl, BUCKETS } from '@/lib/storage/server'
 import { buildPrompt, type PromptInputs } from '@/lib/prompts'
 import { checkAllRateLimits, recordGenerationUsage } from '@/lib/rate-limit'
+import { spendCredits, hasSufficientCredits } from '@/lib/db/billing'
 import OpenAI from 'openai'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -79,6 +80,20 @@ export async function POST(request: NextRequest) {
             'Retry-After': String(Math.ceil((blockedLimit.resetAt.getTime() - Date.now()) / 1000)),
           }
         }
+      )
+    }
+
+    // Check if user has sufficient credits (1 credit per generation)
+    const hasCredits = await hasSufficientCredits(user.id, 1)
+
+    if (!hasCredits) {
+      return NextResponse.json(
+        { 
+          error: 'Insufficient credits',
+          message: 'You do not have enough credits to generate an image. Please upgrade your plan.',
+          code: 'NO_CREDITS'
+        },
+        { status: 402 } // 402 Payment Required
       )
     }
 
@@ -314,7 +329,10 @@ async function processGeneration(
       cost_cents: costCents,
     })
 
-    console.log(`Generation job ${jobId} completed successfully. Output asset: ${outputAssetId}`)
+    // Spend 1 credit for the successful generation
+    await spendCredits(userId, 1, 'generation', 'job', jobId)
+
+    console.log(`Generation job ${jobId} completed successfully. Output asset: ${outputAssetId}, 1 credit spent`)
   } catch (error) {
     console.error(`Generation job ${jobId} failed:`, error)
 
