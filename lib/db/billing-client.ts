@@ -263,3 +263,78 @@ export async function getRemainingCreditsInfo(): Promise<{
   }
 }
 
+/**
+ * Check if current user has sufficient credits (client-side)
+ */
+export async function hasSufficientCredits(requiredAmount: number = 1): Promise<boolean> {
+  const supabase = createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return false
+  }
+  
+  const { data, error } = await supabase
+    .rpc('has_sufficient_credits', {
+      p_user_id: user.id,
+      p_required_amount: requiredAmount
+    })
+  
+  if (error) {
+    console.error('Error checking sufficient credits:', error)
+    return false
+  }
+  
+  return data || false
+}
+
+/**
+ * Get comprehensive credit summary (client-side)
+ */
+export async function getCreditSummary(): Promise<{
+  balance: number
+  transaction_count: number
+  last_transaction_at: string | null
+  total_earned: number
+  total_spent: number
+  subscription_plan: string | null
+  monthly_allowance: number | null
+}> {
+  const supabase = createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return {
+      balance: 0,
+      transaction_count: 0,
+      last_transaction_at: null,
+      total_earned: 0,
+      total_spent: 0,
+      subscription_plan: null,
+      monthly_allowance: null
+    }
+  }
+  
+  const { data, error } = await supabase
+    .rpc('get_credit_summary', {
+      p_user_id: user.id
+    })
+  
+  if (error) {
+    console.error('Error fetching credit summary:', error)
+    return {
+      balance: 0,
+      transaction_count: 0,
+      last_transaction_at: null,
+      total_earned: 0,
+      total_spent: 0,
+      subscription_plan: null,
+      monthly_allowance: null
+    }
+  }
+  
+  return data as any
+}
+

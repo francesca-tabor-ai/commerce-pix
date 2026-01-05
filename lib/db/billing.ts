@@ -132,6 +132,7 @@ export async function updateSubscription(
 
 /**
  * Get user's credit balance
+ * Uses optimized SQL view for fast lookups
  */
 export async function getUserCreditBalance(userId: string): Promise<number> {
   const supabase = await createClient()
@@ -145,6 +146,13 @@ export async function getUserCreditBalance(userId: string): Promise<number> {
   }
   
   return data || 0
+}
+
+/**
+ * Get credit balance (alias for consistency)
+ */
+export async function getCreditBalance(userId: string): Promise<number> {
+  return getUserCreditBalance(userId)
 }
 
 /**
@@ -199,6 +207,177 @@ export async function addCredits(
   }
   
   return data
+}
+
+/**
+ * Spend credits transactionally
+ * Prevents negative balances and ensures atomicity
+ * Returns result object with success status and balance info
+ */
+export async function spendCredits(
+  userId: string,
+  amount: number,
+  reason: CreditReason = 'generation',
+  refType: CreditRefType = null,
+  refId: string | null = null
+): Promise<{
+  success: boolean
+  error?: string
+  balance?: number
+  amount_spent?: number
+  previous_balance?: number
+  new_balance?: number
+  required?: number
+  shortfall?: number
+}> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .rpc('spend_credits', {
+      p_user_id: userId,
+      p_amount: amount,
+      p_reason: reason,
+      p_ref_type: refType,
+      p_ref_id: refId
+    })
+  
+  if (error) {
+    console.error('Error spending credits:', error)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+  
+  return data as any
+}
+
+/**
+ * Grant monthly credits based on subscription plan
+ * Typically called on subscription renewal or period reset
+ */
+export async function grantMonthlyCredits(
+  userId: string,
+  planId: string
+): Promise<{
+  success: boolean
+  error?: string
+  credits_granted?: number
+  plan_id?: string
+  previous_balance?: number
+  new_balance?: number
+}> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .rpc('grant_monthly_credits', {
+      p_user_id: userId,
+      p_plan_id: planId
+    })
+  
+  if (error) {
+    console.error('Error granting monthly credits:', error)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+  
+  return data as any
+}
+
+/**
+ * Check if user has sufficient credits for an operation
+ */
+export async function hasSufficientCredits(
+  userId: string,
+  requiredAmount: number = 1
+): Promise<boolean> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .rpc('has_sufficient_credits', {
+      p_user_id: userId,
+      p_required_amount: requiredAmount
+    })
+  
+  if (error) {
+    console.error('Error checking sufficient credits:', error)
+    return false
+  }
+  
+  return data || false
+}
+
+/**
+ * Grant bonus credits (admin function)
+ * Useful for promotions, refunds, or customer support
+ */
+export async function grantBonusCredits(
+  userId: string,
+  amount: number,
+  note: string = 'bonus'
+): Promise<{
+  success: boolean
+  error?: string
+  credits_granted?: number
+  note?: string
+  previous_balance?: number
+  new_balance?: number
+}> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .rpc('grant_bonus_credits', {
+      p_user_id: userId,
+      p_amount: amount,
+      p_note: note
+    })
+  
+  if (error) {
+    console.error('Error granting bonus credits:', error)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+  
+  return data as any
+}
+
+/**
+ * Get comprehensive credit summary for a user
+ */
+export async function getCreditSummary(userId: string): Promise<{
+  balance: number
+  transaction_count: number
+  last_transaction_at: string | null
+  total_earned: number
+  total_spent: number
+  subscription_plan: string | null
+  monthly_allowance: number | null
+}> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .rpc('get_credit_summary', {
+      p_user_id: userId
+    })
+  
+  if (error) {
+    console.error('Error fetching credit summary:', error)
+    return {
+      balance: 0,
+      transaction_count: 0,
+      last_transaction_at: null,
+      total_earned: 0,
+      total_spent: 0,
+      subscription_plan: null,
+      monthly_allowance: null
+    }
+  }
+  
+  return data as any
 }
 
 /**
