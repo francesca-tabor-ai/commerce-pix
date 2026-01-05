@@ -1,9 +1,11 @@
 import { cn } from '@/lib/utils'
 import { Button, ButtonProps } from '@/components/ui/button'
 import { ArrowRight } from 'lucide-react'
+import { ReactNode } from 'react'
 
-interface CTAButtonProps extends ButtonProps {
+interface CTAButtonProps extends Omit<ButtonProps, 'size'> {
   showArrow?: boolean
+  children: ReactNode
 }
 
 export function CTAButton({ 
