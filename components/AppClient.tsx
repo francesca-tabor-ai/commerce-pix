@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Upload, Wand2, Loader2, Image as ImageIcon } from 'lucide-react'
+import { Plus, Upload, Wand2, Loader2, Image as ImageIcon, RefreshCw } from 'lucide-react'
 import { getProjectsClient, createProjectClient } from '@/lib/db/projects-client'
 import { getAssetsClient } from '@/lib/db/assets-client'
 import type { Project } from '@/lib/db/types'
@@ -14,6 +14,7 @@ import type { Asset } from '@/lib/db/asset-types'
 import UploadComponent from '@/components/UploadComponent'
 import ModeSelector from '@/components/ModeSelector'
 import GenerationProgress from '@/components/GenerationProgress'
+import AssetGallery from '@/components/AssetGallery'
 
 type Mode = 'main_white' | 'lifestyle' | 'feature_callout' | 'packaging'
 
@@ -180,22 +181,32 @@ export default function AppClient({ userId }: { userId: string }) {
     setCurrentJobId(null)
   }
 
+  const handleCreateVariation = (asset: Asset) => {
+    // Populate settings from the asset's prompt_payload
+    if (asset.prompt_payload?.inputs) {
+      setModeSettings({
+        mode: asset.mode,
+        productCategory: asset.prompt_payload.inputs.productCategory || '',
+        brandTone: asset.prompt_payload.inputs.brandTone || '',
+        productDescription: asset.prompt_payload.inputs.productDescription || '',
+        scene: asset.prompt_payload.inputs.scene || '',
+      })
+    } else {
+      // Fallback: just set the mode
+      setModeSettings(prev => ({ ...prev, mode: asset.mode }))
+    }
+
+    // Set the source asset as input if available
+    if (asset.source_asset_id) {
+      setInputAssetId(asset.source_asset_id)
+    }
+
+    // Scroll to generate section
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const inputAssets = assets.filter(a => a.kind === 'input')
   const outputAssets = assets.filter(a => a.kind === 'output')
-
-  const outputsByMode = {
-    main_white: outputAssets.filter(a => a.mode === 'main_white'),
-    lifestyle: outputAssets.filter(a => a.mode === 'lifestyle'),
-    feature_callout: outputAssets.filter(a => a.mode === 'feature_callout'),
-    packaging: outputAssets.filter(a => a.mode === 'packaging'),
-  }
-
-  const modeLabels: Record<string, string> = {
-    main_white: 'Main Image (White Background)',
-    lifestyle: 'Lifestyle Scene',
-    feature_callout: 'Feature Callout',
-    packaging: 'Packaging / In-Box',
-  }
 
   return (
     <div className="flex h-screen">
@@ -348,73 +359,30 @@ export default function AppClient({ userId }: { userId: string }) {
               )}
 
               {/* Results Gallery */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <ImageIcon className="h-5 w-5 mr-2" />
-                    Results Gallery
-                  </CardTitle>
-                  <CardDescription>
-                    Generated images organized by mode
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {loadingAssets ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                      <span className="text-muted-foreground">Loading assets...</span>
-                    </div>
-                  ) : outputAssets.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-8">
-                      No generated images yet. Upload and generate to see results here.
-                    </p>
-                  ) : (
-                    <div className="space-y-6">
-                      {Object.entries(outputsByMode).map(([mode, assets]) => {
-                        if (assets.length === 0) return null
-
-                        return (
-                          <div key={mode}>
-                            <h3 className="font-semibold mb-3">
-                              {modeLabels[mode]} ({assets.length})
-                            </h3>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                              {assets.map(asset => (
-                                <div key={asset.id} className="space-y-2">
-                                  <div className="aspect-square bg-secondary rounded-md overflow-hidden">
-                                    {signedUrls[asset.id] ? (
-                                      <img
-                                        src={signedUrls[asset.id]}
-                                        alt={`Generated ${mode}`}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center">
-                                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                                      </div>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Date(asset.created_at).toLocaleString()}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {outputAssets.length > 0 && (
-                    <div className="mt-4">
-                      <Button onClick={loadAssets} variant="outline" size="sm">
-                        Refresh Gallery
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold">Results Gallery</h2>
+                  <Button onClick={loadAssets} variant="outline" size="sm" disabled={loadingAssets}>
+                    {loadingAssets ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                <AssetGallery
+                  assets={outputAssets}
+                  onCreateVariation={handleCreateVariation}
+                  onRefresh={loadAssets}
+                />
+              </div>
             </>
           )}
         </div>
