@@ -757,10 +757,10 @@ export default async function HelpPage() {
                   Settings
                 </Button>
               </Link>
-              <Link href="/pricing">
+              <Link href="/app/billing">
                 <Button variant="outline" className="w-full justify-start">
                   <Zap className="h-4 w-4 mr-2" />
-                  View Plans
+                  View Plans & Billing
                 </Button>
               </Link>
             </div>

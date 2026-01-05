@@ -34,7 +34,8 @@ import {
 import { toast } from 'sonner'
 import { updateDefaultBrandTone, requestAccountDeletion } from '@/app/actions/settings'
 import type { UserPreferences, BrandTone } from '@/lib/db/preferences'
-import { User as UserIcon, Palette, AlertTriangle, Loader2 } from 'lucide-react'
+import { User as UserIcon, Palette, AlertTriangle, Loader2, CreditCard, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 
 interface SettingsClientProps {
   user: User
@@ -245,6 +246,51 @@ export default function SettingsClient({ user, initialPreferences }: SettingsCli
                   consistently work with a particular style.
                 </p>
               </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Billing & Subscription */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-primary" />
+            <CardTitle>Billing & Subscription</CardTitle>
+          </div>
+          <CardDescription>
+            Manage your plan, credits, and billing information
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <p className="font-medium text-sm mb-1">Subscription & Credits</p>
+              <p className="text-sm text-muted-foreground">
+                View your current plan, credit balance, upgrade options, and billing history
+              </p>
+            </div>
+            <Link href="/app/billing">
+              <Button variant="outline">
+                Manage Billing
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+
+          <div className="pt-4 border-t">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-medium text-sm mb-1">View Pricing</p>
+                <p className="text-sm text-muted-foreground">
+                  Compare all available plans and features to find the best fit for your business
+                </p>
+              </div>
+              <Link href="/app/billing">
+                <Button variant="outline" size="sm">
+                  View Plans
+                </Button>
+              </Link>
             </div>
           </div>
         </CardContent>
