@@ -11,13 +11,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { CheckCircle2, Sparkles, Zap, TrendingUp } from 'lucide-react'
+import { CheckCircle2, Sparkles, Zap, TrendingUp, AlertTriangle, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 interface UpgradeModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  reason?: 'no_credits' | 'trial_ended' | 'feature_locked'
+  reason?: 'no_credits' | 'trial_ended' | 'feature_locked' | 'plan_canceled' | 'rate_limit_exceeded'
+  resetTime?: string | null
 }
 
 const FEATURED_PLANS = [
@@ -51,7 +52,7 @@ const FEATURED_PLANS = [
   },
 ]
 
-export function UpgradeModal({ open, onOpenChange, reason = 'no_credits' }: UpgradeModalProps) {
+export function UpgradeModal({ open, onOpenChange, reason = 'no_credits', resetTime }: UpgradeModalProps) {
   const router = useRouter()
 
   const getMessage = () => {
@@ -59,7 +60,7 @@ export function UpgradeModal({ open, onOpenChange, reason = 'no_credits' }: Upgr
       case 'no_credits':
         return {
           title: 'Out of Credits',
-          description: 'You\'ve used all your trial credits. Upgrade to continue creating amazing product images.',
+          description: 'You\'ve used all your credits. Upgrade to continue creating amazing product images.',
           icon: <Zap className="h-12 w-12 text-amber-500 mx-auto mb-4" />,
         }
       case 'trial_ended':
@@ -73,6 +74,20 @@ export function UpgradeModal({ open, onOpenChange, reason = 'no_credits' }: Upgr
           title: 'Premium Feature',
           description: 'This feature is available on paid plans. Upgrade to unlock it.',
           icon: <Sparkles className="h-12 w-12 text-primary mx-auto mb-4" />,
+        }
+      case 'plan_canceled':
+        return {
+          title: 'Plan Canceled',
+          description: 'Your subscription has been canceled. Reactivate your plan or upgrade to continue generating images.',
+          icon: <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />,
+        }
+      case 'rate_limit_exceeded':
+        return {
+          title: 'Rate Limit Reached',
+          description: resetTime 
+            ? `You've reached your generation limit. Upgrade for unlimited daily generations or wait until ${new Date(resetTime).toLocaleTimeString()}.`
+            : 'You\'ve reached your generation limit. Upgrade for unlimited daily generations or try again in a few minutes.',
+          icon: <Clock className="h-12 w-12 text-amber-500 mx-auto mb-4" />,
         }
       default:
         return {

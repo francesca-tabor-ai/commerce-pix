@@ -1,5 +1,6 @@
 import { requireUser } from '@/lib/supabase/server'
 import { getDashboardStats, getRecentOutputs } from '@/lib/db/dashboard'
+import { getUserSubscription } from '@/lib/db/billing'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import AppHeader from '@/components/app/AppHeader'
@@ -15,6 +16,7 @@ import {
 import Link from 'next/link'
 import { DashboardOutputGallery } from '@/components/dashboard/DashboardOutputGallery'
 import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist'
+import { InlineUpgradeCard } from '@/components/billing/InlineUpgradeCard'
 import { getOnboardingProgress, shouldShowOnboarding } from '@/lib/db/onboarding'
 
 export const dynamic = 'force-dynamic'
@@ -23,12 +25,25 @@ export default async function DashboardPage() {
   const user = await requireUser()
 
   // Fetch dashboard data
-  const [stats, recentOutputs, onboardingProgress, showChecklist] = await Promise.all([
+  const [stats, recentOutputs, onboardingProgress, showChecklist, subscription] = await Promise.all([
     getDashboardStats(user.id),
     getRecentOutputs(user.id, 12),
     getOnboardingProgress(user.id),
-    shouldShowOnboarding(user.id)
+    shouldShowOnboarding(user.id),
+    getUserSubscription(user.id)
   ])
+
+  // Determine if upgrade should be shown
+  const shouldShowUpgrade = 
+    stats.creditBalance === 0 || 
+    subscription?.status === 'canceled' ||
+    subscription?.status === 'past_due'
+  
+  const getUpgradeReason = () => {
+    if (stats.creditBalance === 0) return 'no_credits'
+    if (subscription?.status === 'canceled') return 'plan_canceled'
+    return 'no_credits'
+  }
 
   return (
     <>
@@ -48,6 +63,14 @@ export default async function DashboardPage() {
           <OnboardingChecklist 
             initialProgress={onboardingProgress} 
             initialShouldShow={showChecklist}
+          />
+        )}
+
+        {/* Upgrade Prompt */}
+        {shouldShowUpgrade && (
+          <InlineUpgradeCard 
+            reason={getUpgradeReason() as any}
+            compact
           />
         )}
 
