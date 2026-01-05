@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/supabase/server'
 import { uploadAsset, BUCKETS } from '@/lib/storage/server'
 import { createAsset } from '@/lib/db/assets'
+import { markPhotoUploaded } from '@/lib/db/onboarding'
 import { v4 as uuidv4 } from 'uuid'
 
 export const dynamic = 'force-dynamic'
@@ -130,6 +131,14 @@ export async function POST(request: NextRequest) {
       mime_type: file.type,
       storage_path: uploadResult.path!,
     })
+
+    // Mark onboarding step completed
+    try {
+      await markPhotoUploaded(user.id)
+    } catch (error) {
+      // Don't fail the upload if onboarding tracking fails
+      console.error('Failed to mark photo uploaded in onboarding:', error)
+    }
 
     // Return simple response with asset ID and project ID
     return NextResponse.json({

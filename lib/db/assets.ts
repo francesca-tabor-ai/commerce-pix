@@ -7,7 +7,7 @@ import type { Asset, NewAsset, UpdateAsset, AssetStatistic } from './asset-types
  * Get all assets for a specific project
  */
 export async function getAssetsByProject(projectId: string): Promise<Asset[] | null> {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
   
   const { data, error } = await supabase
     .from('assets')
@@ -130,18 +130,22 @@ export async function getAsset(id: string): Promise<Asset | null> {
 export async function createAsset(asset: NewAsset): Promise<Asset | null> {
   const supabase = await createClient()
   
-  // Get the current user
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    throw new Error('User must be authenticated to create an asset')
+  // Get the current user (if user_id not provided)
+  let userId = asset.user_id
+  if (!userId) {
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      throw new Error('User must be authenticated to create an asset')
+    }
+    userId = user.id
   }
   
   const { data, error } = await supabase
     .from('assets')
     .insert({
       ...asset,
-      user_id: user.id,
+      user_id: userId,
     })
     .select()
     .single()

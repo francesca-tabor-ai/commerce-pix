@@ -2,7 +2,7 @@ import { requireUser } from '@/lib/supabase/server'
 import { getDashboardStats, getRecentOutputs } from '@/lib/db/dashboard'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { AppHeader } from '@/components/app/AppHeader'
+import AppHeader from '@/components/app/AppHeader'
 import { 
   Zap, 
   Image as ImageIcon, 
@@ -14,6 +14,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { DashboardOutputGallery } from '@/components/dashboard/DashboardOutputGallery'
+import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist'
+import { getOnboardingProgress, shouldShowOnboarding } from '@/lib/db/onboarding'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,9 +23,11 @@ export default async function DashboardPage() {
   const user = await requireUser()
 
   // Fetch dashboard data
-  const [stats, recentOutputs] = await Promise.all([
+  const [stats, recentOutputs, onboardingProgress, showChecklist] = await Promise.all([
     getDashboardStats(user.id),
-    getRecentOutputs(user.id, 12)
+    getRecentOutputs(user.id, 12),
+    getOnboardingProgress(user.id),
+    shouldShowOnboarding(user.id)
   ])
 
   return (
@@ -38,6 +42,14 @@ export default async function DashboardPage() {
             Here's what's happening with your account
           </p>
         </div>
+
+        {/* Onboarding Checklist */}
+        {showChecklist && (
+          <OnboardingChecklist 
+            initialProgress={onboardingProgress} 
+            initialShouldShow={showChecklist}
+          />
+        )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

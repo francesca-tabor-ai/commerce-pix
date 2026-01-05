@@ -6,6 +6,7 @@ import { uploadFile, getSignedUrl, BUCKETS } from '@/lib/storage/server'
 import { buildPrompt, type PromptInputs } from '@/lib/prompts'
 import { checkAllRateLimits, recordGenerationUsage } from '@/lib/rate-limit'
 import { spendCredits, hasSufficientCredits } from '@/lib/db/billing'
+import { markMainImageGenerated, markLifestyleImageGenerated } from '@/lib/db/onboarding'
 import OpenAI from 'openai'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -394,6 +395,18 @@ async function processGeneration(
       status: 'succeeded',
       cost_cents: costCents,
     })
+
+    // Track onboarding progress based on mode
+    try {
+      if (mode === 'main_white') {
+        await markMainImageGenerated(userId)
+      } else if (mode === 'lifestyle') {
+        await markLifestyleImageGenerated(userId)
+      }
+    } catch (error) {
+      // Don't fail generation if onboarding tracking fails
+      console.error('Failed to update onboarding progress:', error)
+    }
 
     console.log(`✅ Generation job ${jobId} completed successfully`)
     console.log(`   Output asset: ${outputAsset.id}`)

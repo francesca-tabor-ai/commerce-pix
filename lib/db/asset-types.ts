@@ -20,6 +20,8 @@ export type Asset = {
 }
 
 export type NewAsset = {
+  id?: string
+  user_id?: string
   project_id: string
   kind: AssetKind
   mode: AssetMode
