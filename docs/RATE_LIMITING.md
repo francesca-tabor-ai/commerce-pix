@@ -1,381 +1,581 @@
-# Rate Limiting Implementation
+# Rate Limiting & Abuse Protection
+
+Complete guide to CommercePix's rate limiting system for AI generation.
 
 ## Overview
 
-Commerce PIX implements **comprehensive rate limiting** to prevent abuse and ensure fair usage. Rate limits are enforced per-user with both **per-minute** and **per-day** counters stored in Supabase.
-
----
+CommercePix implements intelligent rate limiting to prevent abuse, ensure fair resource allocation, and encourage plan upgrades. The system uses time-based counters stored in the database and applies different limits based on user subscription status.
 
 ## Rate Limits
 
-### Current Limits
+### Per-Minute Limits (All Users)
 
-| Limit Type | Value | Description |
-|------------|-------|-------------|
-| **Per Minute** | 5 generations | Maximum generations allowed within a 1-minute window |
-| **Per Day** | 50 generations | Maximum generations allowed within a 24-hour period (free tier) |
+**Purpose:** Prevent API abuse and ensure system stability
 
-### Configuration
+| User Type | Limit | Window | Purpose |
+|-----------|-------|--------|---------|
+| All Users | 5 generations | 1 minute (rolling) | Abuse prevention |
 
-Limits are defined in `lib/rate-limit.ts`:
+**Applies to:**
+- Trial users
+- Free users
+- Paid users
+- All subscription statuses
 
-```typescript
-export const RATE_LIMITS = {
-  GENERATIONS_PER_MINUTE: 5,
-  GENERATIONS_PER_DAY: 50, // Free tier placeholder
-} as const
-```
+**Reset:** Rolling 1-minute window (resets at start of next minute)
 
 ---
 
-## Database Schema
+### Daily Limits (Subscription-Based)
 
-### `usage_counters` Table
+**Purpose:** Encourage upgrades and monetization
 
-```sql
-CREATE TABLE public.usage_counters (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  counter_type TEXT NOT NULL CHECK (counter_type IN ('per_minute', 'per_day')),
-  count INT NOT NULL DEFAULT 0,
-  period_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
+| User Type | Limit | Window | Purpose |
+|-----------|-------|--------|---------|
+| Trial/Free | 100 generations | 1 day (UTC) | Trial limitation |
+| Paid (Active) | Unlimited* | N/A | Paid benefit |
 
-**Fields**:
-- `id` - Unique identifier
-- `user_id` - References auth.users (cascades on delete)
-- `counter_type` - Either 'per_minute' or 'per_day'
-- `count` - Current usage count for this period
-- `period_start` - Start of the current period (rounded to minute or day)
-- `created_at` - Record creation timestamp
-- `updated_at` - Last update timestamp (auto-updated via trigger)
+*_Paid users have no daily limit, only per-minute limit applies_
 
-**Indexes**:
-- `idx_usage_counters_user_type` (UNIQUE) - `(user_id, counter_type, period_start)`
-- `idx_usage_counters_user_id` - `(user_id)`
-- `idx_usage_counters_period_start` - `(period_start)` for cleanup
+**Trial/Free includes:**
+- `status: 'trialing'`
+- `status: 'canceled'`
+- `status: 'past_due'`
+- No subscription
 
-**RLS Policies**:
-- Users can only read/write their own counters
-- All operations require authentication
-- Based on `auth.uid() = user_id`
+**Paid (Active) includes:**
+- `status: 'active'`
+
+**Reset:** Midnight UTC daily
 
 ---
 
 ## Implementation
 
-### Rate Limiting Flow
+### Rate Limit Configuration
 
-```
-1. Request to /api/generate
-      ↓
-2. Authenticate user (requireUser)
-      ↓
-3. Check rate limits (checkAllRateLimits)
-      ├─ Check per-minute counter
-      └─ Check per-day counter
-      ↓
-4. If limit exceeded:
-   - Return 429 error
-   - Include reset time
-   - Send Retry-After header
-      ↓
-5. If within limit:
-   - Process generation
-   - Record usage (increment both counters)
-   - Return success with updated limits
-```
-
-### Key Functions
-
-**File**: `lib/rate-limit.ts`
-
-#### `checkAllRateLimits(userId: string)`
-
-Checks both per-minute and per-day limits for a user.
-
-**Returns**:
 ```typescript
-{
-  allowed: boolean
-  perMinute: RateLimitResult
-  perDay: RateLimitResult
-  blockedBy?: 'per_minute' | 'per_day'
+// lib/rate-limit.ts
+export const RATE_LIMITS = {
+  // All users (prevents API abuse)
+  GENERATIONS_PER_MINUTE: 5,
+  
+  // Trial/free users only
+  TRIAL_GENERATIONS_PER_DAY: 100,
+  
+  // Paid users (effectively unlimited)
+  PAID_GENERATIONS_PER_DAY: Number.MAX_SAFE_INTEGER,
 }
 ```
 
-#### `recordGenerationUsage(userId: string)`
+### Usage Counters Table
 
-Increments both per-minute and per-day counters for a user.
-
-Called AFTER successful job creation.
-
-#### `getUserUsageStats(userId: string)`
-
-Gets current usage statistics for a user.
-
-**Returns**:
-```typescript
-{
-  perMinute: { current, limit, remaining }
-  perDay: { current, limit, remaining }
-}
+```sql
+CREATE TABLE usage_counters (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id),
+  counter_type TEXT NOT NULL CHECK (counter_type IN ('per_minute', 'per_day')),
+  count INT NOT NULL DEFAULT 0,
+  period_start TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, counter_type, period_start)
+);
 ```
 
-#### `cleanupOldCounters()`
+**Counter Types:**
+- `per_minute` - Rolling minute window
+- `per_day` - Daily window (midnight UTC)
 
-Removes expired counters:
-- per_minute: older than 2 minutes
-- per_day: older than 2 days
-
-Should be run periodically via cron job.
+**Period Start:**
+- `per_minute`: Rounded down to current minute
+- `per_day`: Start of day (00:00:00 UTC)
 
 ---
 
 ## API Integration
 
-### `/api/generate` Endpoint
+### Check Rate Limits
 
-**Rate Limit Check** (before processing):
 ```typescript
-const rateLimitCheck = await checkAllRateLimits(user.id)
+import { checkAllRateLimits } from '@/lib/rate-limit'
+
+// Check all limits before generation
+const rateLimitCheck = await checkAllRateLimits(userId)
 
 if (!rateLimitCheck.allowed) {
-  return NextResponse.json(
-    { 
-      error: 'Rate limit exceeded',
-      message: blockedLimit.message,
-      rateLimit: { type, limit, current, remaining, resetAt }
-    },
-    { 
-      status: 429,
-      headers: {
-        'X-RateLimit-Limit': String(limit),
-        'X-RateLimit-Remaining': String(remaining),
-        'X-RateLimit-Reset': resetAt.toISOString(),
-        'Retry-After': String(seconds),
-      }
-    }
-  )
-}
-```
-
-**Record Usage** (after successful job creation):
-```typescript
-await recordGenerationUsage(user.id)
-```
-
-**Response** (success):
-```json
-{
-  "job": {...},
-  "message": "Generation job created and processing",
-  "rateLimit": {
-    "perMinute": {
-      "current": 2,
-      "limit": 5,
-      "remaining": 3
-    },
-    "perDay": {
-      "current": 15,
-      "limit": 50,
-      "remaining": 35
-    }
+  // User hit a limit
+  const blockedBy = rateLimitCheck.blockedBy // 'per_minute' or 'per_day'
+  const limit = rateLimitCheck[blockedBy]
+  
+  return {
+    error: 'Rate limit exceeded',
+    message: limit.message,
+    upgradeRequired: limit.upgradeRequired,
   }
 }
 ```
 
-**Response** (rate limit exceeded):
+### Record Usage
+
+```typescript
+import { recordGenerationUsage } from '@/lib/rate-limit'
+
+// After successful generation start, increment counters
+await recordGenerationUsage(userId)
+```
+
+### Get Current Usage
+
+```typescript
+import { getUserUsageStats } from '@/lib/rate-limit'
+
+const stats = await getUserUsageStats(userId)
+
+console.log(stats)
+// {
+//   perMinute: { current: 2, limit: 5, remaining: 3 },
+//   perDay: { current: 45, limit: 100, remaining: 55, isTrialUser: true }
+// }
+```
+
+---
+
+## Error Responses
+
+### Per-Minute Limit (429)
+
+**All Users:**
+
 ```json
 {
   "error": "Rate limit exceeded",
-  "message": "You've used 5/5 generations this minute. Try again in 37 seconds.",
+  "message": "Slow down! You've reached the maximum of 5 generations per minute. Please wait 42 seconds before trying again.",
+  "code": "RATE_LIMIT_EXCEEDED",
   "rateLimit": {
     "type": "per_minute",
     "limit": 5,
     "current": 5,
     "remaining": 0,
-    "resetAt": "2026-01-05T01:24:00.000Z"
+    "resetAt": "2026-01-05T12:05:00.000Z",
+    "isPerMinuteLimit": true,
+    "isDailyLimit": false,
+    "upgradeRequired": false,
+    "isTrialUser": false
   }
 }
 ```
 
-### `/api/rate-limit/status` Endpoint
+**Status:** `429 Too Many Requests`
 
-**GET** endpoint to check current rate limit status.
-
-**Response**:
-```json
-{
-  "perMinute": {
-    "current": 2,
-    "limit": 5,
-    "remaining": 3
-  },
-  "perDay": {
-    "current": 15,
-    "limit": 50,
-    "remaining": 35
-  },
-  "limits": {
-    "generationsPerMinute": 5,
-    "generationsPerDay": 50
-  }
-}
-```
-
----
-
-## Period Calculation
-
-### Per-Minute Period
-
-Rounded down to the current minute:
-
-```typescript
-const now = new Date()
-const periodStart = new Date(
-  now.getFullYear(),
-  now.getMonth(),
-  now.getDate(),
-  now.getHours(),
-  now.getMinutes(),
-  0, 0
-)
-// Example: 2026-01-05 01:23:45 → 2026-01-05 01:23:00
-```
-
-Reset time: Start of next minute
-
-### Per-Day Period
-
-Rounded down to start of day (UTC):
-
-```typescript
-const now = new Date()
-const periodStart = new Date(Date.UTC(
-  now.getUTCFullYear(),
-  now.getUTCMonth(),
-  now.getUTCDate(),
-  0, 0, 0, 0
-))
-// Example: 2026-01-05 15:30:00 → 2026-01-05 00:00:00 UTC
-```
-
-Reset time: Start of next day (UTC)
-
----
-
-## UI Integration
-
-### Rate Limit Status Display
-
-The API test page (`/api-test`) shows real-time rate limit status:
-
-**Display**:
-- Current usage vs limit for per-minute
-- Current usage vs limit for per-day
-- Remaining generations for each period
-- Refresh button to update status
-
-**Auto-refresh**:
-- Status loads on page load
-- Updates after each generation
-- Can be manually refreshed
-
-**Error Display**:
-- Shows rate limit type that blocked request
-- Displays reset time
-- Includes retry-after information
-
----
-
-## Error Messages
-
-### Per-Minute Limit Exceeded
-
-```
-Rate limit exceeded. You've used 5/5 generations this minute. Try again in 45 seconds.
-```
-
-### Per-Day Limit Exceeded
-
-```
-Rate limit exceeded. You've used 50/50 generations today. Try again in 8 hours.
-```
-
----
-
-## HTTP Headers
-
-### Rate Limit Response Headers
-
-All responses from `/api/generate` include:
-
-```
-X-RateLimit-Limit: 5
-X-RateLimit-Remaining: 3
-X-RateLimit-Reset: 2026-01-05T01:24:00.000Z
-```
-
-### 429 Response Headers
-
-When rate limited (429 status):
-
+**Headers:**
 ```
 X-RateLimit-Limit: 5
 X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 2026-01-05T01:24:00.000Z
-Retry-After: 45
+X-RateLimit-Reset: 2026-01-05T12:05:00.000Z
+Retry-After: 42
+```
+
+**Frontend Action:**
+- Show "slow down" message
+- Display countdown timer
+- Disable generate button
+- Auto-enable after reset time
+
+---
+
+### Daily Limit - Trial Users (429)
+
+**Trial/Free Users:**
+
+```json
+{
+  "error": "Rate limit exceeded",
+  "message": "You've reached your daily limit of 100 generations. Upgrade to a paid plan for unlimited daily generations!",
+  "code": "UPGRADE_REQUIRED",
+  "rateLimit": {
+    "type": "per_day",
+    "limit": 100,
+    "current": 100,
+    "remaining": 0,
+    "resetAt": "2026-01-06T00:00:00.000Z",
+    "isPerMinuteLimit": false,
+    "isDailyLimit": true,
+    "upgradeRequired": true,
+    "isTrialUser": true
+  }
+}
+```
+
+**Status:** `429 Too Many Requests`
+
+**Headers:**
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 2026-01-06T00:00:00.000Z
+Retry-After: 43200
+```
+
+**Frontend Action:**
+- Show upgrade modal
+- Display "Unlimited generations" benefit
+- Highlight paid plan features
+- Show reset time as alternative
+- Call to action: "Upgrade Now"
+
+---
+
+## Frontend Handling
+
+### React Component Example
+
+```typescript
+'use client'
+
+import { useState } from 'react'
+import { UpgradeModal } from '@/components/billing/UpgradeModal'
+import { toast } from 'sonner'
+
+export function GenerateButton({ projectId, inputAssetId, mode }) {
+  const [generating, setGenerating] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [upgradeReason, setUpgradeReason] = useState<string>()
+
+  const handleGenerate = async () => {
+    setGenerating(true)
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, inputAssetId, mode }),
+      })
+
+      const data = await response.json()
+
+      if (response.status === 429) {
+        // Rate limit hit
+        const { rateLimit } = data
+        
+        if (rateLimit.upgradeRequired) {
+          // Daily limit hit - show upgrade modal
+          setUpgradeReason('daily_limit')
+          setShowUpgradeModal(true)
+          toast.error(data.message)
+        } else if (rateLimit.isPerMinuteLimit) {
+          // Per-minute limit - show countdown
+          const retryAfter = parseInt(response.headers.get('Retry-After') || '60')
+          toast.error(data.message, {
+            description: `Try again in ${retryAfter} seconds`,
+          })
+          
+          // Auto-retry after delay (optional)
+          setTimeout(() => {
+            setGenerating(false)
+          }, retryAfter * 1000)
+        }
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error)
+      }
+
+      // Success - poll job status
+      const { jobId } = data
+      pollJobStatus(jobId)
+      
+    } catch (error) {
+      toast.error('Generation failed')
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={handleGenerate} disabled={generating}>
+        {generating ? 'Generating...' : 'Generate'}
+      </Button>
+
+      {showUpgradeModal && (
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          reason={upgradeReason}
+        />
+      )}
+    </>
+  )
+}
+```
+
+### Upgrade Modal Customization
+
+```typescript
+// components/billing/UpgradeModal.tsx
+
+export function UpgradeModal({ isOpen, onClose, reason }) {
+  const messages = {
+    daily_limit: {
+      title: '🚀 Daily Limit Reached!',
+      description: 'You\'ve used all 100 daily generations on your trial plan.',
+      benefit: 'Upgrade to get unlimited daily generations',
+      cta: 'Upgrade Now',
+    },
+    per_minute: {
+      title: '⏱️ Slow Down!',
+      description: 'You\'re generating too quickly.',
+      benefit: 'Take a short break and try again',
+      cta: 'Got It',
+    },
+  }
+
+  const message = messages[reason] || messages.daily_limit
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{message.title}</DialogTitle>
+          <DialogDescription>{message.description}</DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <p className="text-lg font-semibold">{message.benefit}</p>
+          <ul className="mt-4 space-y-2">
+            <li>✅ Unlimited daily generations</li>
+            <li>✅ Higher quality outputs</li>
+            <li>✅ Priority processing</li>
+            <li>✅ Premium support</li>
+          </ul>
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose} variant="outline">
+            Maybe Later
+          </Button>
+          <Link href="/app/billing">
+            <Button onClick={onClose}>{message.cta}</Button>
+          </Link>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 ```
 
 ---
 
-## Maintenance
+## Subscription Status Detection
 
-### Cleanup Old Counters
-
-Run periodically (recommended: hourly):
+### How It Works
 
 ```typescript
-import { cleanupOldCounters } from '@/lib/rate-limit'
+// lib/rate-limit.ts
 
-const deletedCount = await cleanupOldCounters()
-console.log(`Cleaned up ${deletedCount} old counters`)
+// Check subscription status
+const subscription = await getUserSubscription(userId)
+
+// Determine if user is on trial/free
+const isTrialUser = !subscription || 
+                    subscription.status === 'trialing' || 
+                    subscription.status === 'canceled' ||
+                    subscription.status === 'past_due'
+
+// Apply appropriate limit
+const dailyLimit = isTrialUser 
+  ? RATE_LIMITS.TRIAL_GENERATIONS_PER_DAY   // 100
+  : RATE_LIMITS.PAID_GENERATIONS_PER_DAY    // Unlimited
 ```
 
-Or via SQL:
+### Subscription Statuses
 
-```sql
-SELECT cleanup_old_usage_counters();
+| Status | Daily Limit | Reason |
+|--------|-------------|--------|
+| `trialing` | 100 | User on trial period |
+| `active` | Unlimited | Active paid subscription |
+| `canceled` | 100 | Subscription canceled |
+| `past_due` | 100 | Payment failed |
+| `null` (no subscription) | 100 | No subscription exists |
+
+---
+
+## Testing
+
+### Manual Testing
+
+#### Test Per-Minute Limit
+
+```bash
+# Make 6 rapid requests (limit is 5)
+for i in {1..6}; do
+  curl -X POST http://localhost:3000/api/generate \
+    -H "Content-Type: application/json" \
+    -H "Cookie: your-session-cookie" \
+    -d '{
+      "projectId": "project-uuid",
+      "inputAssetId": "asset-uuid",
+      "mode": "main_white"
+    }'
+  echo "\nRequest $i completed\n"
+done
+
+# Request 6 should return 429
 ```
 
-### Monitor Usage
+#### Test Daily Limit (Trial Users)
 
-**Count active counters**:
+```bash
+# Set up: Make 100 generations in one day
+# Then make one more:
+curl -X POST http://localhost:3000/api/generate \
+  -H "Content-Type: application/json" \
+  -H "Cookie: trial-user-session-cookie" \
+  -d '{
+    "projectId": "project-uuid",
+    "inputAssetId": "asset-uuid",
+    "mode": "main_white"
+  }'
+
+# Should return 429 with code: "UPGRADE_REQUIRED"
+```
+
+#### Verify Paid Users Have No Daily Limit
+
+```bash
+# As paid user, make 150+ generations in one day
+# Should all succeed (only per-minute limit applies)
+```
+
+### Integration Tests
+
+```typescript
+import { describe, it, expect } from '@jest/globals'
+import { checkAllRateLimits, recordGenerationUsage } from '@/lib/rate-limit'
+
+describe('Rate Limiting', () => {
+  describe('Per-Minute Limits', () => {
+    it('should allow up to 5 generations per minute', async () => {
+      // Make 5 requests
+      for (let i = 0; i < 5; i++) {
+        const check = await checkAllRateLimits(testUserId)
+        expect(check.allowed).toBe(true)
+        await recordGenerationUsage(testUserId)
+      }
+
+      // 6th request should be blocked
+      const check = await checkAllRateLimits(testUserId)
+      expect(check.allowed).toBe(false)
+      expect(check.blockedBy).toBe('per_minute')
+    })
+
+    it('should reset after 1 minute', async () => {
+      // Hit limit
+      for (let i = 0; i < 5; i++) {
+        await recordGenerationUsage(testUserId)
+      }
+
+      // Wait for minute to roll over
+      await sleep(61000)
+
+      // Should be allowed again
+      const check = await checkAllRateLimits(testUserId)
+      expect(check.allowed).toBe(true)
+    })
+  })
+
+  describe('Daily Limits - Trial Users', () => {
+    it('should allow up to 100 generations per day for trial users', async () => {
+      // Make 100 requests
+      for (let i = 0; i < 100; i++) {
+        const check = await checkAllRateLimits(trialUserId)
+        expect(check.allowed).toBe(true)
+        await recordGenerationUsage(trialUserId)
+      }
+
+      // 101st request should be blocked
+      const check = await checkAllRateLimits(trialUserId)
+      expect(check.allowed).toBe(false)
+      expect(check.blockedBy).toBe('per_day')
+      expect(check.perDay.upgradeRequired).toBe(true)
+    })
+
+    it('should indicate upgrade required for trial users', async () => {
+      // Hit daily limit
+      for (let i = 0; i < 100; i++) {
+        await recordGenerationUsage(trialUserId)
+      }
+
+      const check = await checkAllRateLimits(trialUserId)
+      expect(check.perDay.upgradeRequired).toBe(true)
+      expect(check.perDay.isTrialUser).toBe(true)
+      expect(check.perDay.message).toContain('Upgrade')
+    })
+  })
+
+  describe('Daily Limits - Paid Users', () => {
+    it('should have no daily limit for paid users', async () => {
+      // Make 150 requests (well over trial limit)
+      for (let i = 0; i < 150; i++) {
+        const check = await checkAllRateLimits(paidUserId)
+        
+        // Only check per-minute limit (not daily)
+        if (i % 5 === 0 && i > 0) {
+          // Every 5 requests, wait a minute to avoid per-minute limit
+          await sleep(61000)
+        }
+        
+        expect(check.allowed).toBe(true)
+        await recordGenerationUsage(paidUserId)
+      }
+
+      // Should still be allowed
+      const check = await checkAllRateLimits(paidUserId)
+      expect(check.perDay.limit).toBe(Number.MAX_SAFE_INTEGER)
+    })
+  })
+})
+```
+
+---
+
+## Database Queries
+
+### Check Current Usage
+
 ```sql
+-- Get user's current usage
 SELECT 
   counter_type,
-  COUNT(*) as active_counters,
-  AVG(count) as avg_usage,
-  MAX(count) as max_usage
+  count,
+  period_start,
+  CASE 
+    WHEN counter_type = 'per_minute' THEN period_start + INTERVAL '1 minute'
+    WHEN counter_type = 'per_day' THEN period_start + INTERVAL '1 day'
+  END as resets_at
 FROM usage_counters
-WHERE period_start > NOW() - INTERVAL '1 hour'
-GROUP BY counter_type;
+WHERE user_id = 'user-uuid'
+AND period_start >= NOW() - INTERVAL '1 day'
+ORDER BY period_start DESC;
 ```
 
-**Find heavy users**:
+### Reset User's Counters (Admin Only)
+
 ```sql
+-- Reset all counters for a user
+DELETE FROM usage_counters
+WHERE user_id = 'user-uuid';
+```
+
+### View Top Users by Usage
+
+```sql
+-- Top users by daily generations
 SELECT 
   user_id,
-  SUM(count) as total_generations,
-  MAX(count) as max_per_period
+  SUM(count) as total_generations
 FROM usage_counters
 WHERE counter_type = 'per_day'
-AND period_start > NOW() - INTERVAL '7 days'
+AND period_start >= NOW() - INTERVAL '7 days'
 GROUP BY user_id
 ORDER BY total_generations DESC
 LIMIT 10;
@@ -383,144 +583,284 @@ LIMIT 10;
 
 ---
 
-## Testing
+## Cleanup & Maintenance
 
-### Test Rate Limiting
+### Automatic Cleanup
 
-1. Navigate to `/api-test`
-2. Check rate limit status (should show 0/5 and 0/50)
-3. Upload an input image
-4. Trigger 5 generations within 1 minute
-5. 6th generation should return 429 error
-6. Wait 1 minute and try again (should succeed)
+Old counters should be cleaned up periodically to prevent table bloat.
 
-### Expected Behavior
+**Cron Job:**
+```typescript
+// cleanup-usage-counters.ts
+import { cleanupOldCounters } from '@/lib/rate-limit'
 
-**Generation 1-5**:
-- HTTP 200
-- Job created successfully
-- Rate limit info shows: 1/5, 2/5, 3/5, 4/5, 5/5
+async function main() {
+  const deleted = await cleanupOldCounters()
+  console.log(`Cleaned up ${deleted} old usage counters`)
+}
 
-**Generation 6 (same minute)**:
-- HTTP 429
-- Error: "Rate limit exceeded"
-- Message: "You've used 5/5 generations this minute. Try again in X seconds"
-- Retry-After header present
+main()
+```
 
-**After 1 minute**:
-- Counter resets
-- Generation succeeds
-- Rate limit info shows: 1/5 (new period)
+**SQL Function:**
+```sql
+CREATE OR REPLACE FUNCTION cleanup_old_usage_counters()
+RETURNS INT AS $$
+DECLARE
+  deleted_count INT;
+BEGIN
+  -- Delete per_minute counters older than 1 hour
+  DELETE FROM usage_counters
+  WHERE counter_type = 'per_minute'
+  AND period_start < NOW() - INTERVAL '1 hour';
+  
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  
+  -- Delete per_day counters older than 7 days
+  DELETE FROM usage_counters
+  WHERE counter_type = 'per_day'
+  AND period_start < NOW() - INTERVAL '7 days';
+  
+  GET DIAGNOSTICS deleted_count = deleted_count + ROW_COUNT;
+  
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Schedule:**
+- Run daily at 00:00 UTC
+- Keeps last 1 hour of per_minute counters
+- Keeps last 7 days of per_day counters
 
 ---
 
-## Security
+## Configuration
 
-### Why Database-Backed?
+### Adjusting Limits
 
-1. **Accurate** - Shared state across all server instances
-2. **Persistent** - Survives server restarts
-3. **Scalable** - Works with multiple servers/containers
-4. **Auditable** - Full history of usage in database
+To change rate limits, update `lib/rate-limit.ts`:
 
-### Protection Against
+```typescript
+export const RATE_LIMITS = {
+  GENERATIONS_PER_MINUTE: 10,          // Change from 5 to 10
+  TRIAL_GENERATIONS_PER_DAY: 200,      // Change from 100 to 200
+  PAID_GENERATIONS_PER_DAY: Number.MAX_SAFE_INTEGER,
+}
+```
 
-- ✅ **API Abuse** - Prevents spamming generation endpoint
-- ✅ **Cost Control** - Limits OpenAI API costs per user
-- ✅ **Fair Usage** - Ensures equitable resource distribution
-- ✅ **DoS Attacks** - Mitigates denial-of-service attempts
+**Note:** Changes take effect immediately for new counters.
 
-### Bypass Prevention
+### Custom Limits Per Plan
 
-- Server-side only (no client control)
-- Checked before any processing
-- Usage recorded after job creation
-- RLS policies prevent tampering
+For more granular control:
+
+```typescript
+// Get user's plan
+const subscription = await getUserSubscription(userId)
+const plan = await getPlan(subscription.plan_id)
+
+// Apply plan-specific limits
+let dailyLimit
+switch (plan.id) {
+  case 'starter':
+    dailyLimit = 100
+    break
+  case 'pro':
+    dailyLimit = 500
+    break
+  case 'brand':
+    dailyLimit = 2000
+    break
+  default:
+    dailyLimit = Number.MAX_SAFE_INTEGER
+}
+```
 
 ---
 
-## Future Enhancements
+## Best Practices
 
-### 1. Tiered Limits
-
-Different limits for different user tiers:
+### 1. Check Limits Early
 
 ```typescript
-export const RATE_LIMITS = {
-  FREE: {
-    GENERATIONS_PER_MINUTE: 5,
-    GENERATIONS_PER_DAY: 50,
-  },
-  PRO: {
-    GENERATIONS_PER_MINUTE: 20,
-    GENERATIONS_PER_DAY: 500,
-  },
-  ENTERPRISE: {
-    GENERATIONS_PER_MINUTE: 100,
-    GENERATIONS_PER_DAY: 5000,
-  },
+// Check limits BEFORE any expensive operations
+const rateLimitCheck = await checkAllRateLimits(userId)
+
+if (!rateLimitCheck.allowed) {
+  return error response // Fast fail
+}
+
+// Continue with expensive operations
+```
+
+### 2. Provide Clear Feedback
+
+```typescript
+// Show remaining generations
+const stats = await getUserUsageStats(userId)
+
+toast.info(`You have ${stats.perDay.remaining} generations remaining today`)
+```
+
+### 3. Show Upgrade CTA Proactively
+
+```typescript
+// Warn when approaching limit
+if (stats.perDay.remaining <= 10 && stats.perDay.isTrialUser) {
+  showUpgradePrompt({
+    message: 'Only 10 generations left today!',
+    cta: 'Upgrade for unlimited',
+  })
 }
 ```
 
-### 2. Burst Allowance
-
-Allow short bursts above limit:
+### 4. Handle Errors Gracefully
 
 ```typescript
-export const RATE_LIMITS = {
-  GENERATIONS_PER_MINUTE: 5,
-  BURST_ALLOWANCE: 10, // Allow up to 10 in first minute
-  BURST_RECOVERY: 1,    // Recover 1 burst token per minute
-}
-```
-
-### 3. Dynamic Limits
-
-Adjust based on system load or time of day:
-
-```typescript
-function getLimit(userId: string, timeOfDay: number) {
-  if (isOffPeak(timeOfDay)) {
-    return RATE_LIMITS.GENERATIONS_PER_MINUTE * 2
+try {
+  const response = await fetch('/api/generate', ...)
+  
+  if (response.status === 429) {
+    const data = await response.json()
+    handleRateLimitError(data)
+    return
   }
-  return RATE_LIMITS.GENERATIONS_PER_MINUTE
+  
+  // ... success handling
+} catch (error) {
+  // Generic error handling
 }
 ```
 
-### 4. Cost-Based Limiting
+---
 
-Limit by cost instead of count:
+## Monitoring
+
+### Metrics to Track
+
+1. **Rate Limit Hits**
+   - Per-minute limit hits (abuse indicator)
+   - Daily limit hits (upgrade opportunity)
+
+2. **Conversion Metrics**
+   - Users who hit daily limit
+   - Users who upgrade after hitting limit
+   - Time from limit to upgrade
+
+3. **Usage Patterns**
+   - Average generations per day by plan
+   - Peak usage times
+   - Users approaching limits
+
+### Logging
 
 ```typescript
-export const RATE_LIMITS = {
-  COST_PER_DAY_CENTS: 100, // $1.00 per day
+// Log rate limit hits
+if (!rateLimitCheck.allowed) {
+  console.log('Rate limit hit', {
+    userId,
+    type: rateLimitCheck.blockedBy,
+    isTrialUser: blockedLimit.isTrialUser,
+    current: blockedLimit.current,
+    limit: blockedLimit.limit,
+  })
 }
 ```
 
-Track actual OpenAI API costs and limit when threshold reached.
+---
+
+## Troubleshooting
+
+### Issue: User says they hit limit but shouldn't have
+
+**Check:**
+```sql
+SELECT * FROM usage_counters
+WHERE user_id = 'user-uuid'
+AND period_start >= NOW() - INTERVAL '1 day';
+```
+
+**Solution:**
+- Verify subscription status
+- Check if limit calculation is correct
+- Manually reset counters if needed
+
+### Issue: Counters not resetting
+
+**Check:**
+```sql
+SELECT * FROM usage_counters
+WHERE period_start < NOW() - INTERVAL '1 day'
+ORDER BY period_start DESC
+LIMIT 10;
+```
+
+**Solution:**
+- Run cleanup function
+- Verify period_start calculations
+- Check system time
+
+### Issue: Paid users hitting daily limit
+
+**Check:**
+```typescript
+const subscription = await getUserSubscription(userId)
+console.log(subscription.status) // Should be 'active'
+```
+
+**Solution:**
+- Verify subscription status is 'active'
+- Check subscription hasn't expired
+- Update rate limit logic if needed
 
 ---
 
-## Migration File
+## Security Considerations
 
-**Location**: `supabase/migrations/20260105000000_create_usage_counters_table.sql`
+### Prevent Bypass Attempts
 
-**To Apply**:
-1. Open Supabase Dashboard
-2. Go to SQL Editor
-3. Paste migration SQL
-4. Execute
+1. **Server-Side Only**
+   - All checks happen server-side
+   - No client-side bypass possible
+
+2. **Database-Backed**
+   - Counters stored in database
+   - Atomic increments
+   - Race condition protection
+
+3. **User-Specific**
+   - Counters tied to authenticated user_id
+   - Can't bypass by changing IP/cookies
+
+### Rate Limit Evasion
+
+**Potential Issues:**
+- Multiple accounts per user
+- Shared accounts
+- API key abuse
+
+**Mitigations:**
+- Email verification required
+- Credit card validation for paid plans
+- IP-based monitoring (optional)
+- Account flagging system
 
 ---
 
-## Related Documentation
+## Conclusion
 
-- [API Documentation](./API_DOCUMENTATION.md) - API endpoints
-- [Database Schema](./DATABASE_SCHEMA.md) - Database tables
+The rate limiting system provides:
+
+- ✅ **Abuse Prevention** - Per-minute limits for all users
+- ✅ **Fair Usage** - Daily limits for trial users
+- ✅ **Monetization** - Upgrade incentive at daily limit
+- ✅ **Flexibility** - Subscription-based limits
+- ✅ **User-Friendly** - Clear messages and CTAs
+- ✅ **Production-Ready** - Database-backed, tested, scalable
+
+Adjust limits as needed based on usage patterns and business needs.
 
 ---
 
-**Status**: ✅ Implemented  
-**Last Updated**: 2026-01-05  
-**Version**: 1.0
-
+**For support:** See [Generate API](./GENERATE_API.md) for integration details.

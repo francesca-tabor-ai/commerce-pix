@@ -75,16 +75,27 @@ export async function POST(request: NextRequest) {
         ? rateLimitCheck.perMinute 
         : rateLimitCheck.perDay
 
+      const isPerMinuteLimit = rateLimitCheck.blockedBy === 'per_minute'
+      const isDailyLimit = rateLimitCheck.blockedBy === 'per_day'
+      const upgradeRequired = blockedLimit.upgradeRequired || false
+      const isTrialUser = blockedLimit.isTrialUser || false
+
+      // Return friendly error with upgrade CTA if applicable
       return NextResponse.json(
         { 
           error: 'Rate limit exceeded',
           message: blockedLimit.message,
+          code: upgradeRequired ? 'UPGRADE_REQUIRED' : 'RATE_LIMIT_EXCEEDED',
           rateLimit: {
             type: rateLimitCheck.blockedBy,
             limit: blockedLimit.limit,
             current: blockedLimit.current,
             remaining: blockedLimit.remaining,
             resetAt: blockedLimit.resetAt.toISOString(),
+            isPerMinuteLimit,
+            isDailyLimit,
+            upgradeRequired,
+            isTrialUser,
           }
         },
         { 
