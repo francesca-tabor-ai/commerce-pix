@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Download, Loader2, RefreshCw, Sparkles, Star } from 'lucide-react'
 import Image from 'next/image'
 import type { Asset } from '@/lib/db/asset-types'
+import { OutputsGallerySkeleton } from './GallerySkeleton'
 
 interface OutputsGalleryProps {
   outputs: Asset[]
@@ -167,9 +168,7 @@ export function OutputsGallery({ outputs, onRefresh, onCreateVariation }: Output
           </TabsList>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <OutputsGallerySkeleton count={outputs.length > 0 ? outputs.length : 4} />
           ) : filteredOutputs.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredOutputs.map((output) => (

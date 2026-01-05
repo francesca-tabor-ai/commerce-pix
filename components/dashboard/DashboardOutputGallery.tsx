@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Download, ExternalLink } from 'lucide-react'
 import Image from 'next/image'
 import type { Asset } from '@/lib/db/asset-types'
+import { DashboardGallerySkeleton } from '../workspace/GallerySkeleton'
 
 interface DashboardOutputGalleryProps {
   outputs: Asset[]
@@ -96,19 +97,7 @@ export function DashboardOutputGallery({ outputs }: DashboardOutputGalleryProps)
   }
 
   if (loading) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {outputs.map((asset) => (
-          <Card key={asset.id} className="overflow-hidden">
-            <div className="aspect-square bg-muted animate-pulse" />
-            <div className="p-3 space-y-2">
-              <div className="h-4 bg-muted rounded animate-pulse" />
-              <div className="h-3 bg-muted rounded w-2/3 animate-pulse" />
-            </div>
-          </Card>
-        ))}
-      </div>
-    )
+    return <DashboardGallerySkeleton count={outputs.length || 12} />
   }
 
   return (

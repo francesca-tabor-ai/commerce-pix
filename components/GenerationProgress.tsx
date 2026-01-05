@@ -134,13 +134,26 @@ export default function GenerationProgress({ jobId, onComplete, onDismiss }: Gen
   const getStatusText = () => {
     switch (job.status) {
       case 'queued':
-        return 'Queued'
+        return 'Queued for Processing'
       case 'running':
-        return 'Generating...'
+        return 'AI is Creating Your Image'
       case 'succeeded':
-        return 'Complete!'
+        return 'Generation Complete!'
       case 'failed':
-        return 'Failed'
+        return 'Generation Failed'
+    }
+  }
+
+  const getProgressMessage = () => {
+    switch (job.status) {
+      case 'queued':
+        return 'Your request is in the queue. Starting soon...'
+      case 'running':
+        return 'Building your Amazon-compliant product image with AI...'
+      case 'succeeded':
+        return 'Your image is ready! Gallery will update automatically.'
+      case 'failed':
+        return job.error || 'Something went wrong. Please try again.'
     }
   }
 
@@ -205,14 +218,26 @@ export default function GenerationProgress({ jobId, onComplete, onDismiss }: Gen
           </div>
         )}
 
+        {/* Progress message */}
+        <div className="p-3 bg-muted rounded-md">
+          <p className="text-sm text-muted-foreground text-center">
+            {getProgressMessage()}
+          </p>
+        </div>
+
         {/* Progress indicator */}
         {(job.status === 'queued' || job.status === 'running') && (
           <div className="space-y-2">
             <div className="h-2 bg-secondary rounded-full overflow-hidden">
-              <div className="h-full bg-primary animate-pulse" style={{ width: job.status === 'queued' ? '30%' : '70%' }} />
+              <div className="h-full bg-primary transition-all duration-1000" 
+                   style={{ 
+                     width: job.status === 'queued' ? '30%' : '70%',
+                     animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                   }} />
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              {job.status === 'queued' ? 'Preparing...' : 'Generating with AI...'}
+              {job.status === 'queued' && '⏱️ Step 1: Preparing your request...'}
+              {job.status === 'running' && '✨ Step 2: AI is generating your image...'}
             </p>
           </div>
         )}

@@ -15,6 +15,7 @@ interface UploadWidgetProps {
 export function UploadWidget({ projectId, onUploadComplete }: UploadWidgetProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadedFile, setUploadedFile] = useState<{ url: string; name: string } | null>(null)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -62,8 +63,14 @@ export function UploadWidget({ projectId, onUploadComplete }: UploadWidgetProps)
     }
 
     setUploading(true)
+    setUploadProgress(0)
 
     try {
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90))
+      }, 200)
+
       const formData = new FormData()
       formData.append('file', file)
       formData.append('projectId', projectId)
@@ -72,6 +79,9 @@ export function UploadWidget({ projectId, onUploadComplete }: UploadWidgetProps)
         method: 'POST',
         body: formData,
       })
+
+      clearInterval(progressInterval)
+      setUploadProgress(100)
 
       const data = await response.json()
 
@@ -94,6 +104,7 @@ export function UploadWidget({ projectId, onUploadComplete }: UploadWidgetProps)
       })
     } finally {
       setUploading(false)
+      setUploadProgress(0)
     }
   }
 
@@ -121,9 +132,26 @@ export function UploadWidget({ projectId, onUploadComplete }: UploadWidgetProps)
             }`}
           >
             {uploading ? (
-              <div className="flex flex-col items-center gap-3">
+              <div className="flex flex-col items-center gap-4 w-full max-w-xs mx-auto">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Uploading...</p>
+                <div className="w-full space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Uploading...</span>
+                    <span className="text-primary font-medium">{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-primary h-2 transition-all duration-300 ease-out"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-center text-muted-foreground">
+                    {uploadProgress < 30 && 'Preparing image...'}
+                    {uploadProgress >= 30 && uploadProgress < 70 && 'Uploading to server...'}
+                    {uploadProgress >= 70 && uploadProgress < 100 && 'Processing...'}
+                    {uploadProgress === 100 && 'Complete!'}
+                  </p>
+                </div>
               </div>
             ) : (
               <>
