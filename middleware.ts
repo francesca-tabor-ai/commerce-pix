@@ -1,12 +1,23 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { generateRequestId } from '@/lib/request-context'
 
 export async function middleware(request: NextRequest) {
+  // Generate or get request ID for tracing
+  const requestId = request.headers.get('x-request-id') || generateRequestId()
+  
+  // Create response with request ID header
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-request-id', requestId)
+  
   let response = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: requestHeaders,
     },
   })
+  
+  // Add request ID to response headers for client visibility
+  response.headers.set('x-request-id', requestId)
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

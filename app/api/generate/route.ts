@@ -7,6 +7,8 @@ import { buildPrompt, type PromptInputs } from '@/lib/prompts'
 import { checkAllRateLimits, recordGenerationUsage } from '@/lib/rate-limit'
 import { spendCredits, hasSufficientCredits } from '@/lib/db/billing'
 import { markMainImageGenerated, markLifestyleImageGenerated } from '@/lib/db/onboarding'
+import { getRequestId } from '@/lib/request-context'
+import { createContextLogger } from '@/lib/logger'
 import OpenAI from 'openai'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -64,12 +66,22 @@ const openai = new OpenAI({
  * - 500: Server error
  */
 export async function POST(request: NextRequest) {
+  const requestId = await getRequestId()
+  const log = createContextLogger({ requestId, endpoint: '/api/generate' })
+  
+  log.info('Generation request received')
+  
   try {
     // Authenticate user
     const user = await requireUser()
+    log.info('User authenticated', { userId: user.id, userEmail: user.email })
 
     // Check rate limits BEFORE any processing
     const rateLimitCheck = await checkAllRateLimits(user.id)
+    log.debug('Rate limit check completed', { 
+      allowed: rateLimitCheck.allowed, 
+      blockedBy: rateLimitCheck.blockedBy 
+    })
 
     if (!rateLimitCheck.allowed) {
       const blockedLimit = rateLimitCheck.blockedBy === 'per_minute' 
@@ -80,6 +92,13 @@ export async function POST(request: NextRequest) {
       const isDailyLimit = rateLimitCheck.blockedBy === 'per_day'
       const upgradeRequired = blockedLimit.upgradeRequired || false
       const isTrialUser = blockedLimit.isTrialUser || false
+
+      log.warn('Rate limit exceeded', {
+        userId: user.id,
+        blockedBy: rateLimitCheck.blockedBy,
+        limit: blockedLimit.limit,
+        current: blockedLimit.current,
+      })
 
       // Return friendly error with upgrade CTA if applicable
       return NextResponse.json(
@@ -216,6 +235,8 @@ export async function POST(request: NextRequest) {
     // Start generation asynchronously
     // Note: Credits are only spent AFTER successful generation
     // If generation fails, job is marked 'failed' and credits are NOT spent
+    log.info('Starting async generation', { jobId: job.id, mode })
+    
     processGeneration(
       job.id,
       inputAsset,
@@ -227,8 +248,11 @@ export async function POST(request: NextRequest) {
         constraints,
       },
       promptVersion,
-      user.id
-    ).catch(error => console.error('Background generation error:', error))
+      user.id,
+      requestId
+    ).catch(error => {
+      log.error('Background generation error', error)
+    })
 
     // Record usage AFTER successful job creation (for rate limiting)
     await recordGenerationUsage(user.id)
@@ -275,17 +299,24 @@ async function processGeneration(
   mode: string,
   promptInputs: PromptInputs,
   promptVersion: string,
-  userId: string
+  userId: string,
+  requestId: string
 ) {
+  const log = createContextLogger({ requestId, jobId, userId, mode })
+  
   try {
+    log.info('Starting generation job', { jobId, mode, userId })
+    
     // Update job status to running
     await updateGenerationJob(jobId, { status: 'running' })
+    log.debug('Job status updated to running')
 
     // Build prompt using prompt library
     const { prompt, promptPayload } = buildPrompt(mode as any, promptInputs)
-
-    console.log(`Generating image for job ${jobId} with mode: ${mode}`)
-    console.log('Prompt:', prompt)
+    log.debug('Prompt built', { 
+      promptVersion, 
+      hasWarnings: promptPayload.complianceWarnings && promptPayload.complianceWarnings.length > 0 
+    })
 
     // Download input image from storage
     const inputImageUrl = await getSignedUrl(
@@ -405,28 +436,44 @@ async function processGeneration(
       }
     } catch (error) {
       // Don't fail generation if onboarding tracking fails
-      console.error('Failed to update onboarding progress:', error)
+      log.warn('Failed to update onboarding progress', error instanceof Error ? error : undefined)
     }
 
-    console.log(`✅ Generation job ${jobId} completed successfully`)
-    console.log(`   Output asset: ${outputAsset.id}`)
-    console.log(`   Storage path: ${storagePath}`)
-    console.log(`   Cost: $${(costCents / 100).toFixed(2)}`)
+    log.info('Generation job completed successfully', {
+      jobId,
+      outputAssetId: outputAsset.id,
+      storagePath,
+      costCents,
+      creditsSpent: 1,
+    })
+    
   } catch (error) {
-    console.error(`❌ Generation job ${jobId} failed:`, error)
+    log.error('Generation job failed', error instanceof Error ? error : new Error(String(error)))
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown generation error'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    
+    // Build detailed error info for DB (store as JSON string for better structure)
+    const detailedError = JSON.stringify({
+      message: errorMessage,
+      stack: errorStack?.split('\n').slice(0, 10).join('\n'), // Limit stack trace length
+      timestamp: new Date().toISOString(),
+      mode,
+      userId,
+      requestId,
+    })
 
-    // Update job as failed
+    // Update job as failed with detailed error
     // CRITICAL: Do NOT spend credits when generation fails
     await updateGenerationJob(jobId, {
       status: 'failed',
-      error: errorMessage,
+      error: detailedError,
     })
 
-    console.log(`   Job ${jobId} marked as failed`)
-    console.log(`   Credits NOT spent (generation failed)`)
-    console.log(`   Error: ${errorMessage}`)
+    log.warn('Job marked as failed, credits NOT spent', {
+      jobId,
+      errorMessage,
+    })
   }
 }
 

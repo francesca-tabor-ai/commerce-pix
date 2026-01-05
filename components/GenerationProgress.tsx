@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ErrorDetailsDialog } from './ErrorDetailsDialog'
 
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
@@ -204,8 +205,21 @@ export default function GenerationProgress({ jobId, onComplete, onDismiss }: Gen
 
         {/* Error message */}
         {job.status === 'failed' && job.error && (
-          <div className="p-3 bg-destructive/10 rounded-md">
-            <p className="text-sm text-destructive">{job.error}</p>
+          <div className="space-y-3">
+            <div className="p-3 bg-destructive/10 rounded-md">
+              <p className="text-sm text-destructive font-medium mb-2">
+                Job failed — Something went wrong during generation
+              </p>
+              <ErrorDetailsDialog
+                error={job.error}
+                jobId={job.id}
+                trigger={
+                  <Button variant="outline" size="sm" className="w-full">
+                    View Error Details
+                  </Button>
+                }
+              />
+            </div>
           </div>
         )}
 
