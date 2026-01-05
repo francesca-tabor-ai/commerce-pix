@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import type { Metadata } from 'next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
@@ -10,34 +9,6 @@ import { CheckCircle2, Sparkles } from 'lucide-react'
 import SiteHeader from '@/components/site/SiteHeader'
 import SiteFooter from '@/components/site/SiteFooter'
 import { Container, Section, CTAButton } from '@/components/ui/primitives'
-
-export const metadata: Metadata = {
-  title: 'Pricing - CommercePix | AI Product Images for Amazon',
-  description: 'Simple, transparent pricing for AI-powered Amazon product images. Plans from $19/month with pay-as-you-go credits. 14-day free trial on all plans.',
-  keywords: ['CommercePix pricing', 'Amazon image generation pricing', 'product photography pricing', 'AI image costs'],
-  openGraph: {
-    title: 'Pricing - CommercePix',
-    description: 'Simple, transparent pricing for AI-powered Amazon product images. Start from $19/month with a 14-day free trial.',
-    url: 'https://commercepix.ai/pricing',
-    siteName: 'CommercePix',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'CommercePix Pricing',
-      },
-    ],
-    locale: 'en_US',
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Pricing - CommercePix',
-    description: 'Simple, transparent pricing for AI-powered Amazon product images. Start from $19/month.',
-    images: ['/og-image.png'],
-  },
-}
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
@@ -234,7 +205,7 @@ export default function PricingPage() {
                 </CardHeader>
 
                 <CardContent className="flex-1 flex flex-col">
-                  <Link href={plan.cta === 'Contact Sales' ? '/contact' : '/auth/signup'} className="mb-4">
+                  <Link href={plan.cta === 'Contact Sales' ? '/contact' : '/auth?tab=signup'} className="mb-4">
                     {plan.popular ? (
                       <Button className="w-full">{plan.cta}</Button>
                     ) : (
@@ -390,7 +361,7 @@ export default function PricingPage() {
               Start your 14-day free trial today. No credit card required.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Link href="/auth/signup">
+              <Link href="/auth?tab=signup">
                 <CTAButton showArrow>Start Free Trial</CTAButton>
               </Link>
               <Link href="/contact">

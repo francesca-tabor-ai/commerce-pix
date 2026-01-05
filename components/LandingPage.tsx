@@ -28,7 +28,7 @@ export default function LandingPage() {
               Upload a product photo. Choose what you need. Get listing-ready images designed to convert.
             </p>
             <div className="pt-4">
-              <Link href="/auth/signup">
+              <Link href="/auth?tab=signup">
                 <CTAButton showArrow>Start Free Trial</CTAButton>
               </Link>
             </div>
@@ -294,7 +294,7 @@ export default function LandingPage() {
               <p className="text-lg font-medium text-graphite">
                 No photoshoot. No design software. No guesswork.
               </p>
-              <Link href="/auth/signup">
+              <Link href="/auth?tab=signup">
                 <CTAButton showArrow>Start Free Trial</CTAButton>
               </Link>
             </div>

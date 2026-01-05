@@ -28,10 +28,10 @@ export default function SiteHeader() {
             <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Pricing
             </Link>
-            <Link href="/auth/login">
+            <Link href="/auth?tab=signin">
               <Button variant="ghost" size="sm">Sign In</Button>
             </Link>
-            <Link href="/auth/signup">
+            <Link href="/auth?tab=signup">
               <Button size="sm">Get Started</Button>
             </Link>
           </nav>
@@ -73,10 +73,10 @@ export default function SiteHeader() {
             >
               Pricing
             </Link>
-            <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)}>
+            <Link href="/auth?tab=signin" onClick={() => setMobileMenuOpen(false)}>
               <Button variant="ghost" size="sm" className="w-full">Sign In</Button>
             </Link>
-            <Link href="/auth/signup" onClick={() => setMobileMenuOpen(false)}>
+            <Link href="/auth?tab=signup" onClick={() => setMobileMenuOpen(false)}>
               <Button size="sm" className="w-full">Get Started</Button>
             </Link>
           </nav>
